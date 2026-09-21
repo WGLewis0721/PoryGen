@@ -1,34 +1,42 @@
-# PoryGen Source Search Lab
+# PoryGen Source Search Lab V2
 
-A deliberately small search-engine prototype used to learn the fundamentals PoryGen will eventually need for source discovery.
+A small, readable experiment for the candidate-discovery technology PoryGen needs between **Scan** and an actionable finding.
 
-It is **not production PoryGen code** and is not wired into the live product.
+It is isolated from production PoryGen. It does not change billing, authentication, Supabase schemas, or the production scanner.
 
-## What it does
+## Experience
 
-1. A user types a query into one search bar.
-2. The browser sends the query in a POST body, not the URL.
-3. The server tokenizes the query.
-4. It searches the 10 text sources in `public/sources/`.
-5. Local sources are ranked with a simple weighted word-count score:
-   - title matches = 5 points
-   - tag matches = 3 points
-   - body matches = 1 point
-   - results matching more query terms get a small coverage boost
-6. If local sources match, the best local results are returned.
-7. If nothing matches, **private mode stops**. An external Brave Search fallback is retained only as an explicit public-demo opt-in and returns at most 5 results.
+```
+public GitHub repo URL
+→ resolve current commit
+→ fetch bounded JS / TS / Python source
+→ split code into overlapping token regions
+→ identifier-preserving fingerprints
+   + identifier-normalized fingerprints
+→ retrieve a shortlist from a prebuilt public-code index
+→ downweight fingerprints common across the corpus
+→ verify ordered token matches and contiguous spans
+→ show evidence
+→ Review source / Dismiss / Rescan
+```
 
-This is intentionally a CS-undergrad/high-school-level project: load → tokenize → retrieve → rank → return results.
+There is one repository input and one **Scan** button. No manual query, provider picker, package install, or repository code execution is involved.
 
-## Privacy rule
+## Current reference coverage
 
-Private mode is the default.
+The committed V2 index contains **6 pinned source files from 3 public repositories**:
 
-Search requests and responses use `Cache-Control: no-store`. Queries are not placed in URLs, not echoed in successful responses, and are not sent to the web provider unless the public-demo checkbox is explicitly enabled.
+- `sindresorhus/yocto-queue` — JavaScript — MIT
+- `date-fns/date-fns` — TypeScript — MIT
+- `psf/requests` — Python — Apache-2.0
 
-For the production PoryGen direction, customer source code must never be sent to a public search engine. PoryGen should query its own public-code index with temporary in-memory fingerprints and retain no customer source or customer-derived fingerprints after the request.
+Exact commits, blob SHAs, paths, and license links are in `config/reference-sources.json`.
 
-See [SECURITY.md](./SECURITY.md).
+This is intentionally tiny. A missing finding means only:
+
+> Nothing sufficiently strong was found in these indexed sources.
+
+It does not mean the code is original.
 
 ## Run
 
@@ -36,32 +44,138 @@ Requires Node 20+.
 
 ```bash
 cd labs/source-search-lab
+npm test
 npm start
 ```
 
-Open: http://localhost:3000
+Open:
 
-## Optional public-demo web fallback
+```text
+http://localhost:3000
+```
 
-Set a Brave Search API key before starting:
+Try the live public fixture:
+
+```text
+https://github.com/sindresorhus/yocto-queue
+```
+
+An optional `GITHUB_TOKEN` raises GitHub API rate limits:
 
 ```bash
-export BRAVE_SEARCH_API_KEY="your-key"
+export GITHUB_TOKEN="..."
 npm start
 ```
 
-Then explicitly check the public-demo web-fallback box in the UI. Do **not** use this mode with private source code.
+## Rebuild the public reference index
 
-## Test
+The customer scan does **not** rebuild the reference corpus.
+
+To reproduce the checked-in index from its pinned public sources:
+
+```bash
+npm run build:index
+```
+
+The builder verifies each configured blob SHA, fetches only those public blobs, and writes `data/reference-index.json`.
+
+## Scan limits
+
+V2 intentionally has conservative limits:
+
+- public GitHub repositories only;
+- JavaScript, TypeScript, and Python;
+- maximum 40 fetched source files;
+- maximum 100 KB per source file;
+- maximum 750 KB fetched source per scan;
+- approximately 15 seconds allowed for GitHub retrieval;
+- generated/vendor/build directories are skipped;
+- GitHub tree truncation, file limits, provider failures, and skipped files are surfaced as partial-scan information.
+
+Repository code is **never executed**. The lab does not install dependencies or invoke repository scripts.
+
+## Matching
+
+The index and customer regions each use two representations:
+
+1. identifier-preserving tokens;
+2. identifier-normalized tokens, where developer-chosen names collapse to `ID`.
+
+Both are shingled and Winnowed. Candidate lists are combined, with fingerprints appearing in much of the small corpus downweighted. Each region is bounded to roughly 20 candidates before the more expensive ordered comparison.
+
+The verifier reports:
+
+- customer line range;
+- public-source line range;
+- side-by-side excerpts;
+- customer-region coverage;
+- source-region coverage;
+- ordered matched-token count;
+- longest contiguous matching block;
+- pinned source URL;
+- available license metadata.
+
+Starting thresholds are experimental:
+
+- 24 ordered matching tokens;
+- contiguous block of 12 tokens;
+- 60% coverage of the smaller comparison side.
+
+Those numbers are **not confidence percentages**.
+
+## Classifications
+
+- **Strong match** — the experimental evidence gate is satisfied and the retrieval evidence is not dominated by corpus-common fingerprints.
+- **Possible / common pattern** — meaningful similarity exists but should be reviewed cautiously.
+- **Insufficient evidence** — nothing in this tiny index cleared the reporting gate.
+
+Similarity is never presented as proof of copying or AI authorship.
+
+## Actions
+
+- **Review source** opens the matching public source pinned to its commit and matched lines.
+- **Dismiss** records a reason only in the page's in-memory JavaScript state. It is not written to a database or browser storage.
+- **Rescan** resolves the repository's current commit again and shows whether prior findings remain or disappear.
+
+## Privacy
+
+Scan requests use POST and responses use `Cache-Control: no-store`.
+
+Customer source and customer-derived fingerprints exist only during the scan in application memory. They are not written into the reference index, database, logs, public search engines, or an LLM provider.
+
+The reference index contains public source only.
+
+See `SECURITY.md`.
+
+## Tests
 
 ```bash
 npm test
 ```
 
-The current suite covers ranking fundamentals plus privacy behavior such as POST-only search, `no-store`, blocked third-party fallback by default, query non-echo, and request-size limits.
+The default suite covers exact matches, identifier renames, formatting changes, partial fragments, mixed files, common patterns, absent sources, bounded retrieval, separate coverage metrics, GitHub file limits, POST/no-store, and the one-click scan flow.
 
-## Why this exists
+A live network fixture is separate:
 
-PoryGen's production scanner already knows how to fingerprint and compare code. What it lacks is a broad candidate-discovery layer: the equivalent of a search engine's crawl/index/retrieve/rank loop.
+```bash
+npm run test:public
+```
 
-This lab isolates the simplest possible version of that idea before we build code-specific indexing.
+It scans `sindresorhus/yocto-queue` from GitHub and verifies that the prebuilt index finds its pinned `index.js`.
+
+See `RESULTS_V2.md` for measured validation.
+
+## Remaining limitations
+
+This is still a lab:
+
+- six indexed files are nowhere near useful public-code coverage;
+- the normalizer is dependency-free lexical analysis, not a full parser;
+- ordered verification uses token-sequence comparison rather than a real AST/control-flow graph;
+- GitHub API latency dominates tiny local matching times;
+- public repositories only;
+- thresholds need calibration on a much larger held-out corpus;
+- no durable dismissal/history workflow;
+- no production queue, worker, auth, entitlement, or database integration.
+
+The purpose of V2 is to make the fundamental service loop real and measurable before scaling the corpus or moving it behind PoryGen's production `SimilarityProvider` interface.
