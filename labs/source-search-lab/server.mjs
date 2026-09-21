@@ -1,78 +1,21 @@
 import http from "node:http";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeSnippet, rankDocuments } from "./lib/search.mjs";
+import { fetchPublicGitHubRepository } from "./lib/github-source.mjs";
+import { scanSourceFiles } from "./lib/search.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "public");
-const sourcesDir = path.join(publicDir, "sources");
+const indexPath = path.join(__dirname, "data", "reference-index.json");
 const port = Number(process.env.PORT || 3000);
-const MAX_BODY_BYTES = 256 * 1024;
+const MAX_BODY_BYTES = 32 * 1024;
 
-function parseSource(filename, text) {
-  const lines = text.split(/\r?\n/);
-  const title = (lines.shift() || filename).replace(/^Title:\s*/i, "").trim();
-  const tagLine = (lines.shift() || "").replace(/^Tags:\s*/i, "");
-  const tags = tagLine.split(",").map((tag) => tag.trim()).filter(Boolean);
-  const body = lines.join("\n").trim();
-  return {
-    id: filename,
-    title,
-    tags,
-    body,
-    url: `/sources/${encodeURIComponent(filename)}`
-  };
-}
-
-async function loadCorpus() {
+async function loadReferenceIndex() {
   try {
-    const names = (await readdir(sourcesDir)).filter((name) => name.endsWith(".txt")).sort();
-    return Promise.all(
-      names.map(async (name) => parseSource(name, await readFile(path.join(sourcesDir, name), "utf8")))
-    );
-  } catch {
-    return [];
-  }
-}
-
-const corpus = await loadCorpus();
-
-export async function webSearch(query, fetchImpl = fetch) {
-  const key = process.env.BRAVE_SEARCH_API_KEY;
-  if (!key) return { configured: false, results: [] };
-
-  const url = new URL("https://api.search.brave.com/res/v1/web/search");
-  url.searchParams.set("q", query);
-  url.searchParams.set("count", "5");
-  url.searchParams.set("country", "US");
-  url.searchParams.set("search_lang", "en");
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-
-  try {
-    const response = await fetchImpl(url, {
-      headers: {
-        Accept: "application/json",
-        "X-Subscription-Token": key
-      },
-      signal: controller.signal
-    });
-
-    if (!response.ok) throw new Error(`Web search returned HTTP ${response.status}`);
-
-    const data = await response.json();
-    const results = (data.web?.results || []).slice(0, 5).map((item) => ({
-      title: item.title,
-      url: item.url,
-      snippet: item.description || "",
-      source: "web"
-    }));
-
-    return { configured: true, results };
-  } finally {
-    clearTimeout(timeout);
+    return JSON.parse(await readFile(indexPath, "utf8"));
+  } catch (error) {
+    throw new Error(`Reference index is missing or invalid. Run "npm run build:index". ${error instanceof Error ? error.message : ""}`);
   }
 }
 
@@ -81,14 +24,15 @@ function privacyHeaders() {
     "Cache-Control": "no-store",
     Pragma: "no-cache",
     Expires: "0",
-    "X-Content-Type-Options": "nosniff"
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
   };
 }
 
 function sendJson(res, status, payload) {
   res.writeHead(status, {
     ...privacyHeaders(),
-    "Content-Type": "application/json; charset=utf-8"
+    "Content-Type": "application/json; charset=utf-8",
   });
   res.end(JSON.stringify(payload));
 }
@@ -101,12 +45,11 @@ async function readJsonBody(req) {
     if (size > MAX_BODY_BYTES) throw new Error("Request too large.");
     chunks.push(chunk);
   }
-
   if (chunks.length === 0) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-async function handleSearch(req, res, searchCorpus, webSearchFn) {
+async function handleScan(req, res, { referenceIndex, repositoryFetcher }) {
   let body;
   try {
     body = await readJsonBody(req);
@@ -114,55 +57,46 @@ async function handleSearch(req, res, searchCorpus, webSearchFn) {
     return sendJson(res, 400, { error: error instanceof Error ? error.message : "Invalid request." });
   }
 
-  let query = typeof body.query === "string" ? body.query.trim() : "";
-  const allowExternalWebSearch = body.allowExternalWebSearch === true;
+  const repositoryUrl = typeof body.repositoryUrl === "string" ? body.repositoryUrl.trim() : "";
+  if (!repositoryUrl) return sendJson(res, 400, { error: "Enter a public GitHub repository URL." });
 
-  if (!query) return sendJson(res, 400, { error: "Enter a search query." });
-
-  const ranked = rankDocuments(query, searchCorpus);
-
-  if (ranked.length > 0) {
-    const payload = {
-      source: "local",
-      searchedLocalSources: searchCorpus.length,
-      results: ranked.slice(0, 10).map((doc) => ({
-        title: doc.title,
-        url: doc.url,
-        tags: doc.tags,
-        score: doc.score,
-        snippet: makeSnippet(doc.body, query),
-        source: "local"
-      }))
-    };
-    query = "";
-    return sendJson(res, 200, payload);
-  }
-
-  if (!allowExternalWebSearch) {
-    query = "";
-    return sendJson(res, 200, {
-      source: "none",
-      searchedLocalSources: searchCorpus.length,
-      privacyProtected: true,
-      externalWebSearch: "disabled",
-      results: []
-    });
-  }
-
+  const started = Date.now();
   try {
-    const web = await webSearchFn(query);
-    query = "";
+    const fetched = await repositoryFetcher(repositoryUrl);
+    const compared = scanSourceFiles(fetched.files, referenceIndex, referenceIndex.settings);
+
+    const strong = compared.findings.filter((f) => f.classification === "strong_match").length;
+    const possible = compared.findings.filter((f) => f.classification === "possible_common_pattern").length;
+    const insufficient = compared.findings.filter((f) => f.classification === "insufficient_evidence").length;
+
     return sendJson(res, 200, {
-      source: "web",
-      searchedLocalSources: searchCorpus.length,
-      webConfigured: web.configured,
-      privacyProtected: false,
-      results: web.results
+      repository: {
+        name: fetched.repository,
+        url: fetched.repositoryUrl,
+        commit: fetched.commit,
+        commitUrl: fetched.commitUrl,
+        defaultBranch: fetched.defaultBranch,
+      },
+      coverage: referenceIndex.coverage,
+      scan: {
+        elapsedMs: Date.now() - started,
+        fetchedFiles: fetched.stats.fetchedFiles,
+        fetchedBytes: fetched.stats.fetchedBytes,
+        partial: fetched.partial || compared.errors.length > 0,
+        treeTruncated: fetched.stats.treeTruncated,
+        stoppedForLimit: fetched.stats.stoppedForLimit,
+        skippedCount: fetched.stats.skippedCount,
+        skipped: fetched.skipped,
+        providerErrors: compared.errors,
+      },
+      summary: { strong, possible, insufficient, total: compared.findings.length },
+      findings: compared.findings,
+      disclaimer:
+        "Similarity is evidence to review, not proof of copying or AI authorship. No match means only that nothing sufficiently strong was found in this lab's indexed sources.",
     });
   } catch (error) {
-    query = "";
     return sendJson(res, 502, {
-      error: error instanceof Error ? error.message : "Web search failed."
+      error: error instanceof Error ? error.message : "Scan failed.",
     });
   }
 }
@@ -171,7 +105,7 @@ function contentType(filePath) {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
   if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
   if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
-  if (filePath.endsWith(".txt")) return "text/plain; charset=utf-8";
+  if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
   return "application/octet-stream";
 }
 
@@ -188,7 +122,7 @@ async function serveStatic(res, pathname) {
     const content = await readFile(filePath);
     res.writeHead(200, {
       ...privacyHeaders(),
-      "Content-Type": contentType(filePath)
+      "Content-Type": contentType(filePath),
     });
     res.end(content);
   } catch {
@@ -197,15 +131,20 @@ async function serveStatic(res, pathname) {
   }
 }
 
-export function createSearchServer({ searchCorpus = corpus, webSearchFn = webSearch } = {}) {
+export function createSearchServer({
+  referenceIndex,
+  repositoryFetcher = fetchPublicGitHubRepository,
+} = {}) {
+  if (!referenceIndex) throw new Error("createSearchServer requires a prebuilt reference index.");
+
   return http.createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
-    if (url.pathname === "/api/search" && req.method === "POST") {
-      return handleSearch(req, res, searchCorpus, webSearchFn);
+    if (url.pathname === "/api/scan" && req.method === "POST") {
+      return handleScan(req, res, { referenceIndex, repositoryFetcher });
     }
 
-    if (url.pathname === "/api/search") {
+    if (url.pathname === "/api/scan") {
       res.writeHead(405, { ...privacyHeaders(), Allow: "POST" });
       return res.end("Method not allowed");
     }
@@ -221,10 +160,11 @@ export function createSearchServer({ searchCorpus = corpus, webSearchFn = webSea
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  const server = createSearchServer();
+  const referenceIndex = await loadReferenceIndex();
+  const server = createSearchServer({ referenceIndex });
   server.listen(port, () => {
-    console.log(`Source Search Lab running at http://localhost:${port}`);
-    console.log(`Loaded ${corpus.length} local sources.`);
-    console.log("Private mode is default. External web fallback requires explicit opt-in.");
+    console.log(`Source Search Lab V2 running at http://localhost:${port}`);
+    console.log(referenceIndex.coverage.claim);
+    console.log("Customer source is processed transiently and is not sent to public search engines.");
   });
 }
