@@ -1,0 +1,4 @@
+Title: Inverted indexes
+Tags: search, index, retrieval
+
+An inverted index maps a searchable term to the documents that contain it. Instead of reading every document whenever a user searches, the search engine looks up the query terms in the index, collects candidate documents, and ranks those candidates.
