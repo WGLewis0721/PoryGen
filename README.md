@@ -2,6 +2,8 @@
 
 **Own your code. Prove your provenance.**
 
+🔗 **Live**: [porygen.william-glewis17.workers.dev](https://porygen.william-glewis17.workers.dev)
+
 PoryGen records how software was created, identifies risky code ancestry, and turns
 AI-assisted development into an auditable evidence trail. It is a provenance-evidence
 platform, not a legal certification authority — see [claim boundaries](#claim-boundaries).
@@ -82,7 +84,17 @@ acceptance scenario.
 
 ## Deployment
 
-Frontend: any static host serving the Vite build (`npm run build` → `dist/`).
+Frontend: deployed to **Cloudflare Workers static assets** (not Pages — the Cloudflare
+account had no existing GitHub-App authorization to connect Pages to this repo without an
+interactive dashboard step, and Workers' direct-upload asset API is fully documented for
+non-interactive deployment; functionally identical result, a public URL serving the Vite
+build with SPA fallback routing). Redeploy after any frontend change:
+
+```bash
+npm run build
+node scripts/deploy-worker-assets.mjs   # see script for the raw Cloudflare API calls
+```
+
 Backend: Supabase project (Postgres + Auth + Edge Functions), already provisioned for
 this build. No server process to deploy — Edge Functions run on Supabase's own runtime.
 
