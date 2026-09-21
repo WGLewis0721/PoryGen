@@ -26,6 +26,8 @@ export interface CorpusEntry {
   fingerprints: Fingerprint[];
   sample: string;
   language: SupportedLanguage;
+  /** A textbook idiom many projects write independently; softens permissive matches to "common pattern". */
+  commonIdiom?: boolean;
 }
 
 export interface CorpusMatch {

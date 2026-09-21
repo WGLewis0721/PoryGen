@@ -132,18 +132,16 @@ interface TreeEntry {
   size?: number;
 }
 
-async function fetchTree(parsed: ParsedGitHubRepo, branch: string): Promise<TreeEntry[]> {
+async function fetchTree(parsed: ParsedGitHubRepo, branch: string): Promise<{ entries: TreeEntry[]; complete: boolean }> {
   const res = await fetch(
     `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
     { headers: githubHeaders() },
   );
   if (!res.ok) throw new IngestError("GITHUB_ERROR", `Could not list repository tree (${res.status}).`);
   const data = await res.json();
-  if (data.truncated) {
-    // Large repositories are intentionally not fully walked — the ingest
-    // limits below cap what we'd process anyway.
-  }
-  return (data.tree ?? []) as TreeEntry[];
+  // GitHub truncates very large trees. The ingest limits below cap what we'd
+  // process anyway, but a truncated listing can't prove a file was deleted.
+  return { entries: (data.tree ?? []) as TreeEntry[], complete: !data.truncated };
 }
 
 function isIgnored(path: string): boolean {
@@ -155,12 +153,39 @@ function extensionOf(path: string): string {
   return idx === -1 ? "" : path.slice(idx).toLowerCase();
 }
 
+export interface RepoSnapshot {
+  files: RepoFile[];
+  /** Every blob path in the default branch — used to tell "deleted" apart from "not sampled". */
+  allPaths: Set<string>;
+  /** False when GitHub truncated the tree listing; absence from allPaths then proves nothing. */
+  treeComplete: boolean;
+}
+
+export async function fetchRepoSnapshot(
+  parsed: ParsedGitHubRepo,
+  branch: string,
+  limits: IngestLimits = DEFAULT_INGEST_LIMITS,
+): Promise<RepoSnapshot> {
+  const { entries: tree, complete } = await fetchTree(parsed, branch);
+  const allPaths = new Set(tree.filter((e) => e.type === "blob").map((e) => e.path));
+  const files = await fetchFilesFromTree(parsed, branch, tree, limits);
+  return { files, allPaths, treeComplete: complete };
+}
+
 export async function fetchRepoFiles(
   parsed: ParsedGitHubRepo,
   branch: string,
   limits: IngestLimits = DEFAULT_INGEST_LIMITS,
 ): Promise<RepoFile[]> {
-  const tree = await fetchTree(parsed, branch);
+  return (await fetchRepoSnapshot(parsed, branch, limits)).files;
+}
+
+async function fetchFilesFromTree(
+  parsed: ParsedGitHubRepo,
+  branch: string,
+  tree: TreeEntry[],
+  limits: IngestLimits,
+): Promise<RepoFile[]> {
   const candidates = tree
     .filter((e) => e.type === "blob")
     .filter((e) => !isIgnored(e.path))

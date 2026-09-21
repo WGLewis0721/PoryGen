@@ -1,9 +1,10 @@
 // A small, explicit reference corpus for structural fingerprint comparison.
 //
-// This is intentionally tiny and bundled with the app. PoryGen's free/demo
-// scanner compares a scanned file's fingerprints against *this configured
-// corpus only* — never "the internet." Product copy must say exactly that:
-// "Structural fingerprint match against configured reference corpus."
+// This is intentionally tiny and bundled with the app. It backs the
+// `porygen-reference-corpus` similarity provider (providers/referenceCorpus.ts),
+// which is the only provider wired into real scans today. Product copy must
+// say exactly what that covers — "checks against known reference source" —
+// and never imply a search of GitHub or the open internet.
 //
 // Entries are common, unattributed utility patterns written for this corpus
 // (not copied from any specific project) so the demo has real, deterministic
@@ -19,11 +20,16 @@ interface RawCorpusEntry {
   license: string;
   language: SupportedLanguage;
   sample: string;
+  commonIdiom?: boolean;
 }
+
+/** Bump when entries change so findings record which corpus revision produced them. */
+export const REFERENCE_CORPUS_VERSION = "2026.1";
 
 const RAW_CORPUS: RawCorpusEntry[] = [
   {
     id: "ref-debounce-js",
+    commonIdiom: true,
     title: "debounce(fn, wait) reference implementation",
     license: "MIT",
     language: "javascript",
@@ -40,6 +46,7 @@ const RAW_CORPUS: RawCorpusEntry[] = [
   },
   {
     id: "ref-deepclone-js",
+    commonIdiom: true,
     title: "deepClone(value) reference implementation",
     license: "MIT",
     language: "javascript",
@@ -57,6 +64,7 @@ const RAW_CORPUS: RawCorpusEntry[] = [
   },
   {
     id: "ref-quicksort-py",
+    commonIdiom: true,
     title: "quicksort(items) reference implementation",
     license: "AGPL-3.0",
     language: "python",
@@ -71,6 +79,7 @@ const RAW_CORPUS: RawCorpusEntry[] = [
   },
   {
     id: "ref-retry-ts",
+    commonIdiom: true,
     title: "withRetry(fn, attempts) reference implementation",
     license: "Apache-2.0",
     language: "typescript",
@@ -98,6 +107,7 @@ function buildCorpus(): CorpusEntry[] {
       license: entry.license,
       language: entry.language,
       sample: entry.sample,
+      commonIdiom: entry.commonIdiom,
       fingerprints: fingerprintTokens(tokens),
     };
   });
@@ -106,7 +116,7 @@ function buildCorpus(): CorpusEntry[] {
 /** Precomputed once per process; the corpus is static and small. */
 export const REFERENCE_CORPUS: CorpusEntry[] = buildCorpus();
 
-/** Containment threshold: a probe must share this fraction of a corpus entry's fingerprints to be a match. */
+/** Containment threshold: a probe must share this fraction of a corpus entry's fingerprints to be a match. Mirrors SIMILARITY_THRESHOLDS.report. */
 export const CORPUS_MATCH_THRESHOLD = 0.55;
 
 export function matchAgainstCorpus(

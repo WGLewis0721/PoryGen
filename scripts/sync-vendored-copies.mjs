@@ -31,6 +31,11 @@ const src = join(root, "packages/provenance-core/src");
     "scanner/winnow.ts",
     "scanner/corpus.ts",
     "scanner/license.ts",
+    "scanner/similarity.ts",
+    "scanner/pipeline.ts",
+    "scanner/providers/types.ts",
+    "scanner/providers/staticCorpus.ts",
+    "scanner/providers/referenceCorpus.ts",
   ];
   for (const relPath of FILES) {
     const from = join(src, relPath);

@@ -192,33 +192,91 @@ export function createRegistryLicenseLookup(fetchImpl: typeof fetch = fetch): Li
       clearTimeout(timeout);
       if (!res.ok) return "Unknown";
       const data = await res.json();
-      const raw: string | undefined = dep.ecosystem === "npm" ? data.license : data.info?.license;
-      return normalizeSpdx(raw);
+      if (dep.ecosystem === "npm") return licenseFromNpmManifest(data);
+      return licenseFromPypiInfo(data?.info);
     } catch {
       return "Unknown";
     }
   };
 }
 
-function normalizeSpdx(raw: string | undefined): LicenseId {
-  if (!raw) return "Unknown";
-  const value = raw.trim();
-  const table: Record<string, LicenseId> = {
-    MIT: "MIT",
-    "Apache-2.0": "Apache-2.0",
-    "Apache 2.0": "Apache-2.0",
-    "BSD-2-Clause": "BSD-2-Clause",
-    "BSD-3-Clause": "BSD-3-Clause",
-    ISC: "ISC",
-    "MPL-2.0": "MPL-2.0",
-    "LGPL-2.1": "LGPL-2.1",
-    "LGPL-3.0": "LGPL-3.0",
-    "GPL-2.0": "GPL-2.0",
-    "GPL-3.0": "GPL-3.0",
-    "AGPL-3.0": "AGPL-3.0",
-    Unlicense: "Unlicense",
-  };
-  return table[value] ?? "Unknown";
+const SPDX_ALIASES: Record<string, LicenseId> = {
+  "mit": "MIT",
+  "mit license": "MIT",
+  "apache-2.0": "Apache-2.0",
+  "apache 2.0": "Apache-2.0",
+  "apache license 2.0": "Apache-2.0",
+  "apache license, version 2.0": "Apache-2.0",
+  "apache software license": "Apache-2.0",
+  "bsd-2-clause": "BSD-2-Clause",
+  "bsd-3-clause": "BSD-3-Clause",
+  "isc": "ISC",
+  "isc license": "ISC",
+  "mpl-2.0": "MPL-2.0",
+  "lgpl-2.1": "LGPL-2.1",
+  "lgpl-3.0": "LGPL-3.0",
+  "gpl-2.0": "GPL-2.0",
+  "gpl-3.0": "GPL-3.0",
+  "agpl-3.0": "AGPL-3.0",
+  "unlicense": "Unlicense",
+  "the unlicense": "Unlicense",
+};
+
+/** Most permissive first. Used to resolve SPDX `OR` (licensee's choice) and `AND` (all apply) expressions. */
+const PERMISSIVENESS: LicenseId[] = [
+  "Unlicense", "MIT", "ISC", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0",
+  "MPL-2.0", "LGPL-2.1", "LGPL-3.0", "GPL-2.0", "GPL-3.0", "AGPL-3.0",
+];
+
+function normalizeSingle(raw: string): LicenseId {
+  const value = raw.trim().replace(/^\(+|\)+$/g, "").trim().toLowerCase().replace(/-(only|or-later)$/, "").replace(/\+$/, "");
+  return SPDX_ALIASES[value] ?? "Unknown";
+}
+
+/** Maps a registry license string — including SPDX `OR`/`AND` expressions — to a known identifier. */
+export function normalizeSpdx(raw: unknown): LicenseId {
+  if (typeof raw !== "string" || !raw.trim()) return "Unknown";
+  const expression = raw.trim().replace(/^\((.*)\)$/, "$1");
+  if (/\sOR\s/i.test(expression)) {
+    const options = expression.split(/\sOR\s/i).map(normalizeSingle).filter((id) => id !== "Unknown");
+    if (options.length === 0) return "Unknown";
+    return options.sort((a, b) => PERMISSIVENESS.indexOf(a) - PERMISSIVENESS.indexOf(b))[0];
+  }
+  if (/\sAND\s/i.test(expression)) {
+    const parts = expression.split(/\sAND\s/i).map(normalizeSingle);
+    if (parts.includes("Unknown")) return "Unknown";
+    return parts.sort((a, b) => PERMISSIVENESS.indexOf(b) - PERMISSIVENESS.indexOf(a))[0];
+  }
+  return normalizeSingle(expression);
+}
+
+function licenseFromNpmManifest(data: { license?: unknown; licenses?: unknown } | null | undefined): LicenseId {
+  const license = data?.license;
+  if (typeof license === "string") return normalizeSpdx(license);
+  if (license && typeof license === "object" && "type" in license) return normalizeSpdx((license as { type: unknown }).type);
+  if (Array.isArray(data?.licenses) && data.licenses.length > 0) {
+    const first = data.licenses[0] as { type?: unknown };
+    return normalizeSpdx(first?.type);
+  }
+  return "Unknown";
+}
+
+function licenseFromPypiInfo(info: { license?: unknown; license_expression?: unknown; classifiers?: unknown } | null | undefined): LicenseId {
+  const fromExpression = normalizeSpdx(info?.license_expression);
+  if (fromExpression !== "Unknown") return fromExpression;
+  const fromField = normalizeSpdx(info?.license);
+  if (fromField !== "Unknown") return fromField;
+  if (Array.isArray(info?.classifiers)) {
+    for (const classifier of info.classifiers) {
+      if (typeof classifier !== "string") continue;
+      const match = classifier.match(/^License :: OSI Approved :: (.+)$/);
+      if (match) {
+        const id = normalizeSpdx(match[1]);
+        if (id !== "Unknown") return id;
+      }
+    }
+  }
+  return "Unknown";
 }
 
 export async function evaluateDependencyLicenses(
