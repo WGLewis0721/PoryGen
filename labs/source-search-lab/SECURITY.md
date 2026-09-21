@@ -1,96 +1,105 @@
-# Security and Code-Safety Rules
+# Security and Code Safety — Source Search Lab V2
 
-This lab is teaching the search fundamentals PoryGen will need. For customer source code, privacy is part of the search architecture, not an add-on.
+V2 treats repository source as scan input, not product data to retain.
 
-## Zero-retention target
+## Customer-code handling
 
-Customer source code must be:
+For this lab:
 
-- processed only for the active request;
-- sent in an HTTP request body, never in the URL/query string;
-- excluded from application logs, analytics, tracing payloads, and error messages;
-- excluded from HTTP/browser/CDN caches;
-- never written to disk, object storage, databases, queues, or temporary files;
-- never sent to a third-party public search engine by default;
-- released from application references as soon as the request completes.
+- only public `https://github.com/owner/repo` repository URLs are accepted;
+- GitHub API URLs are constructed by the server after validating owner/repository names;
+- supported blobs are read directly into process memory;
+- repository code is never executed;
+- dependencies are never installed;
+- repository scripts are never invoked;
+- customer source is not written to disk, a database, object storage, a queue, analytics, or ordinary application logs;
+- customer-derived fingerprints are created in memory and discarded with the scan request;
+- customer source is not sent to Google, Bing, Brave, another public search engine, or an LLM provider.
 
-The honest guarantee is **no durable retention and transient-memory processing only**. A managed language such as JavaScript cannot prove that every physical RAM byte is immediately overwritten after garbage collection, so PoryGen should not market this as cryptographic memory erasure.
+The prebuilt reference index contains **public reference code only**.
 
-## Why the lab changed from GET to POST
+## HTTP protections retained from PR #3
 
-The first version used `/api/search?q=...`. Sensitive material in URLs can appear in browser history, access logs, and referrer data. The current version accepts search input only through `POST /api/search` with JSON in the request body.
-
-Reference:
-- OWASP ASVS 5.0 V14.2.1: https://cornucopia.owasp.org/taxonomy/asvs-5.0/14-data-protection/02-general-data-protection
-- OWASP Application Security FAQ: https://community.owasp.org/OWASP_Application_Security_FAQ
-
-Code mapping:
-- `server.mjs:96-120`
-- `server.mjs:200-219`
-- `public/app.js:53-64`
-- `public/index.html:6`
-
-## Cache policy
-
-Dynamic search responses send:
+The V2 API is:
 
 ```http
+POST /api/scan
 Cache-Control: no-store
 Pragma: no-cache
 Expires: 0
+Referrer-Policy: no-referrer
 ```
 
-`no-store` is the important directive: it tells private and shared HTTP caches not to store the response.
+Repository input is carried in the POST body rather than a URL query parameter.
 
 References:
+
+- OWASP ASVS 5.0, General Data Protection: https://cornucopia.owasp.org/taxonomy/asvs-5.0/14-data-protection/02-general-data-protection
 - MDN Cache-Control: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control
-- OWASP ASVS 5.0 V14.2.2: https://cornucopia.owasp.org/taxonomy/asvs-5.0/14-data-protection/02-general-data-protection
+- OWASP MASWE-0005, sensitive data in logs: https://mas.owasp.org/MASWE/MASVS-STORAGE/MASWE-0005/
 
-Code mapping:
-- `server.mjs:79-94`
-- `server.mjs:178-197`
-- `public/app.js:55-64`
+## Network boundary
 
-## External web search
+Customer scanning talks only to GitHub's repository API for this V2 lab.
 
-The lab retains a Brave Search fallback only as an educational/public-demo feature. It is **off by default** and requires explicit opt-in.
+The fetcher:
 
-Private customer code must not be sent to Brave, Google, Bing, an LLM vendor, or any other external search provider just to discover candidate matches.
+1. validates the user-supplied URL is `https://github.com`;
+2. resolves repository metadata and the current default-branch commit;
+3. requests the commit tree;
+4. fetches only selected supported blobs from `api.github.com`.
 
-Reference:
-- OWASP ASVS 5.0 V14.2.3: https://cornucopia.owasp.org/taxonomy/asvs-5.0/14-data-protection/02-general-data-protection
+The implementation does not accept arbitrary fetch URLs from the customer.
 
-Code mapping:
-- `server.mjs:117-167`
-- `public/index.html:23-26`
-- `public/app.js:60-63`
+## Resource limits
 
-## Logging
+Current defaults:
 
-The server never logs `query` or request bodies.
+- 40 source files;
+- 100,000 bytes per source file;
+- 750,000 total source bytes;
+- 15-second GitHub retrieval budget;
+- 32 KB API request body;
+- generated/vendor/build directories skipped.
 
-Reference:
-- OWASP MASWE-0005, Insertion of Sensitive Data into Logs: https://mas.owasp.org/MASWE/MASVS-STORAGE/MASWE-0005/
+Limit hits and provider failures make the scan visibly partial instead of silently claiming full coverage.
 
-Startup logging at `server.mjs:225-228` contains only the local address, corpus size, and privacy-mode status.
+## Retention claim
 
-## Production direction
+The accurate V2 statement is:
 
-1. PoryGen builds or uses its own index of public code.
-2. Customer code is fetched transiently.
-3. PoryGen computes temporary code fingerprints in memory.
-4. Those fingerprints query PoryGen's own index.
-5. Candidate public sources are retrieved and ranked.
-6. Customer-derived query material is discarded after the request.
-7. Durable findings contain source URLs, scores, line ranges, license metadata, and decisions, but not retained customer source snippets or fingerprints.
+> Customer code is processed transiently for the active scan and is not durably retained by the lab.
 
-## Tests
+This is not a claim of cryptographic RAM erasure. JavaScript garbage collection does not provide that guarantee.
 
-`npm test` includes privacy checks for:
+A future production service could also use a short-lived isolated workspace or ephemeral clone if operational needs require it, provided the lifecycle and deletion policy are documented. V2 does not need that complexity because it reads bounded public blobs directly into memory.
 
-- POST-only search;
-- `Cache-Control: no-store`;
-- private mode blocking the external web provider;
-- no query echo in successful responses;
-- explicit opt-in before web fallback;
-- request-size limits.
+## Browser/session actions
+
+Dismissal reasons live only in an in-memory `Map` in the current browser page.
+
+They are not stored in:
+
+- localStorage;
+- sessionStorage;
+- cookies;
+- PoryGen databases.
+
+Refreshing the page clears them.
+
+## Security tests
+
+The test suite verifies:
+
+- POST-only scan requests;
+- `no-store` responses;
+- strict GitHub repository URL parsing;
+- bounded file/byte behavior;
+- skipped/partial scan reporting;
+- the repository fetch path only calls `api.github.com`;
+- no Google/Bing/Brave search provider is called;
+- unrelated code can return insufficient evidence.
+
+## Production boundary
+
+This lab is not production PoryGen. It does not modify production authentication, billing, APEX entitlements, database schemas, or the existing scanner provider implementation.
