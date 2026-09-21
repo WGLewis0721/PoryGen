@@ -1,98 +1,107 @@
-// Entitlement boundary. PoryGen's standalone demo tracks scan credits
-// locally for display purposes — it does not implement a second
-// production-grade entitlement ledger that competes with APEX. This
-// interface is the seam: swap the local provider for a real APEX-backed one
-// once APEX's own SDK and credentials are deliberately wired in. See
-// docs/APEX_DOGFOOD.md.
+// Plan entitlements, derived from verified Stripe webhook rows (billing_events)
+// and real scan counts. Display-only today: limits are shown, not enforced —
+// scan authorization is Supabase RLS, and paid checkout isn't open yet.
+//
+// Two concerns are deliberately separate:
+//   * customer plans (Free / Pro / Team) — resolved from subscription events
+//     whose metadata carries porygen_plan = "pro" | "team";
+//   * the APEX dogfood SKU — a one-time sandbox payment that must never grant a
+//     plan. Its credit ledger belongs to APEX (see docs/APEX_DOGFOOD.md), so
+//     PoryGen only exposes the seam below and never fakes that integration.
 
-export interface Entitlements {
-  plan: "community" | "pro";
-  scanCreditsRemaining: number;
-  scanCreditsTotal: number;
+import { planById, type PlanId } from "../config/plans";
+import type { BillingEventRow } from "./dbTypes";
+
+export interface PlanState {
+  plan: PlanId;
+  /** "webhook" when a verified Stripe event set the plan; "default" when nothing has. */
+  source: "webhook" | "default";
+  /** Completed APEX dogfood checkouts (operator tests) — shown on diagnostics, never a plan. */
+  apexTestPurchases: number;
 }
 
-export interface EntitlementProvider {
-  getEntitlements(userId: string): Promise<Entitlements>;
-  /** `idempotencyKey` must make repeated calls (e.g. a retried request) safe to no-op. */
-  consumeScanCredit(userId: string, idempotencyKey: string): Promise<{ ok: boolean; entitlements: Entitlements }>;
+const ENDED_SUBSCRIPTION_STATUSES = new Set(["canceled", "unpaid", "incomplete_expired"]);
+
+function summaryField(event: BillingEventRow, key: string): string | null {
+  const value = (event.payload_summary_json ?? {})[key];
+  return typeof value === "string" ? value : null;
 }
 
-const COMMUNITY_MONTHLY_CREDITS = 3;
-const STORAGE_PREFIX = "porygen.demo-entitlements.";
+/** Replays verified webhook events in order. Anything without explicit Pro/Team metadata never grants a plan. */
+export function derivePlan(events: BillingEventRow[]): PlanState {
+  const ordered = [...events].sort((a, b) => a.received_at.localeCompare(b.received_at));
+  let plan: PlanId = "free";
+  let source: PlanState["source"] = "default";
+  let apexTestPurchases = 0;
 
-interface StoredState {
-  plan: "community" | "pro";
-  consumedThisPeriod: number;
-  consumedIdempotencyKeys: string[];
-}
-
-function loadState(userId: string): StoredState {
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + userId);
-    if (raw) return JSON.parse(raw) as StoredState;
-  } catch {
-    // localStorage can throw (private browsing, blocked storage) — fall through to defaults
+  for (const event of ordered) {
+    const tagged = summaryField(event, "porygen_plan");
+    const isPaidPlan = tagged === "pro" || tagged === "team";
+    if (event.event_type === "checkout.session.completed") {
+      if (isPaidPlan && summaryField(event, "mode") !== "payment") {
+        plan = tagged as PlanId;
+        source = "webhook";
+      } else if (!isPaidPlan) {
+        // Before plan separation, the only SKU was the APEX $19 pack; untagged
+        // completions are that test, not a subscription.
+        apexTestPurchases++;
+      }
+    } else if (event.event_type === "customer.subscription.deleted") {
+      plan = "free";
+      source = "webhook";
+    } else if (event.event_type === "customer.subscription.updated" || event.event_type === "customer.subscription.created") {
+      const status = summaryField(event, "subscription_status");
+      if (status && ENDED_SUBSCRIPTION_STATUSES.has(status)) {
+        plan = "free";
+        source = "webhook";
+      } else if (isPaidPlan && (status === "active" || status === "trialing")) {
+        plan = tagged as PlanId;
+        source = "webhook";
+      }
+    }
   }
-  return { plan: "community", consumedThisPeriod: 0, consumedIdempotencyKeys: [] };
+  return { plan, source, apexTestPurchases };
 }
 
-function saveState(userId: string, state: StoredState) {
-  try {
-    localStorage.setItem(STORAGE_PREFIX + userId, JSON.stringify(state));
-  } catch {
-    // best-effort only — this is demo display state, not a real quota enforcement path
-  }
+export interface UsageReadout {
+  plan: PlanId;
+  scansThisMonth: number;
+  scansIncluded: number;
+  repositories: number;
+  repositoriesIncluded: number;
+  overScans: boolean;
+  overRepositories: boolean;
 }
 
-function toEntitlements(state: StoredState): Entitlements {
-  const total = state.plan === "pro" ? 1000 : COMMUNITY_MONTHLY_CREDITS;
+export function usageReadout(plan: PlanId, scansThisMonth: number, repositories: number): UsageReadout {
+  const limits = planById(plan).limits;
   return {
-    plan: state.plan,
-    scanCreditsTotal: total,
-    scanCreditsRemaining: Math.max(0, total - state.consumedThisPeriod),
+    plan,
+    scansThisMonth,
+    scansIncluded: limits.scansPerMonth,
+    repositories,
+    repositoriesIncluded: limits.repositories,
+    overScans: scansThisMonth > limits.scansPerMonth,
+    overRepositories: repositories > limits.repositories,
   };
 }
 
-/**
- * Local, display-only demo quota. Not a security boundary: real scan
- * authorization is enforced by Supabase RLS (a user can only create scans
- * for their own repositories), not by this client-visible counter.
- */
-export class LocalDemoEntitlementProvider implements EntitlementProvider {
-  async getEntitlements(userId: string): Promise<Entitlements> {
-    return toEntitlements(loadState(userId));
-  }
-
-  async consumeScanCredit(userId: string, idempotencyKey: string) {
-    const state = loadState(userId);
-    if (state.consumedIdempotencyKeys.includes(idempotencyKey)) {
-      return { ok: true, entitlements: toEntitlements(state) };
-    }
-    const entitlements = toEntitlements(state);
-    if (entitlements.scanCreditsRemaining <= 0) {
-      return { ok: false, entitlements };
-    }
-    state.consumedThisPeriod += 1;
-    state.consumedIdempotencyKeys = [...state.consumedIdempotencyKeys, idempotencyKey].slice(-200);
-    saveState(userId, state);
-    return { ok: true, entitlements: toEntitlements(state) };
-  }
+export function startOfMonth(now: Date = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
 /**
- * Future binding — intentionally not implemented. Wiring this up requires
- * APEX's own SDK, credentials, and the customer mapping described in
- * docs/APEX_DOGFOOD.md. Never fake this integration; if this class is ever
- * instantiated without that real wiring, fail loudly rather than silently
- * behaving like the local provider.
+ * APEX credit seam — intentionally not implemented. Wiring it requires APEX's
+ * own SDK, credentials, and the customer mapping in docs/APEX_DOGFOOD.md. If
+ * this is ever instantiated without that wiring it fails loudly rather than
+ * pretending to be a ledger.
  */
-export class ApexEntitlementProvider implements EntitlementProvider {
-  async getEntitlements(): Promise<Entitlements> {
-    throw new Error("ApexEntitlementProvider is not wired up in this build — see docs/APEX_DOGFOOD.md.");
-  }
-  async consumeScanCredit(): Promise<{ ok: boolean; entitlements: Entitlements }> {
-    throw new Error("ApexEntitlementProvider is not wired up in this build — see docs/APEX_DOGFOOD.md.");
-  }
+export interface ApexCreditProvider {
+  getCredits(apexCustomerId: string): Promise<number>;
 }
 
-export const entitlementProvider: EntitlementProvider = new LocalDemoEntitlementProvider();
+export class UnwiredApexCreditProvider implements ApexCreditProvider {
+  async getCredits(): Promise<number> {
+    throw new Error("APEX credit provider is not wired up in this build — see docs/APEX_DOGFOOD.md.");
+  }
+}

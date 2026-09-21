@@ -1,82 +1,78 @@
 # Stripe setup
 
-## Status in this build
+PoryGen sells monthly subscriptions (**Pro** $49, **Team** $199). Separately, the APEX dogfood
+experiment uses a $19 one-time SKU — an operator test, not pricing (see
+[APEX_DOGFOOD.md](APEX_DOGFOOD.md)). All plan data lives in `src/config/plans.ts`; nothing about
+pricing is hardcoded in pages.
 
-The full Checkout + webhook code path is implemented and deployed
-(`create-checkout`, `stripe-webhook`, `billing-diagnostics` Edge Functions), but **not
-exercised end-to-end** — no Stripe sandbox `STRIPE_SECRET_KEY` was available in this
-environment. `create-checkout` returns a clear `STRIPE_NOT_CONFIGURED` (501) response
-when the key is absent, verified live:
+## Status
+
+Checkout, webhook, and diagnostics code is implemented. **No subscription Price IDs are
+configured**, so paid checkout fails closed:
 
 ```json
-{"error":"Stripe is not configured in this environment (STRIPE_SECRET_KEY / STRIPE_PRO_PRICE_ID missing).","code":"STRIPE_NOT_CONFIGURED"}
+{"error":"Checkout for the Pro plan isn't open yet (STRIPE_PRICE_PRO_MONTHLY is not configured).","code":"PLAN_NOT_CONFIGURED"}
 ```
 
-This is the [`APEX dogfood`](APEX_DOGFOOD.md) sandbox account
-(`acct_1UHy1FCmLamiWIin`) — see that doc for exactly what the operator needs to do next.
+The frontend mirrors that: with `VITE_BILLING_CHECKOUT_ENABLED` unset, `/pricing` and `/billing`
+say paid checkout isn't open yet and don't offer a checkout button. No completed payment is ever
+faked; plan state changes only through a verified webhook.
 
-## Sandbox account, Product, and Price
+## Products and prices
 
-In the target Stripe sandbox (test mode):
+In Stripe (test mode first):
 
-1. Create a Product: **"PoryGen Pro Scan Pack"**.
-2. Create a one-time Price on it: **$19 USD**, representing 1,000 scan credits.
-3. Copy the Price ID (`price_...`) into `STRIPE_PRO_PRICE_ID`.
-
-`create-checkout` always uses this configured Price ID — it never creates a new Price at
-checkout time, so the same Price ID is what APEX's operator later maps to a credit grant.
-
-## Environment variables (Edge Function secrets)
+1. Product **PoryGen Pro** → recurring monthly price $49 USD → copy the `price_…` ID.
+2. Product **PoryGen Team** → recurring monthly price $199 USD → copy the `price_…` ID.
+3. (APEX only) keep the existing one-time $19 **PoryGen scan pack** price for the dogfood test.
 
 ```bash
 supabase secrets set STRIPE_SECRET_KEY=sk_test_...
 supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
-supabase secrets set STRIPE_PRO_PRICE_ID=price_...
-supabase secrets set APEX_CUSTOMER_ID=<apex-side customer uuid, if dogfooding>
+supabase secrets set STRIPE_PRICE_PRO_MONTHLY=price_...
+supabase secrets set STRIPE_PRICE_TEAM_MONTHLY=price_...
+supabase secrets set STRIPE_APEX_DOGFOOD_PRICE_ID=price_...   # APEX only; STRIPE_PRO_PRICE_ID still works as a legacy fallback
 ```
 
-None of these are ever read client-side; `create-checkout` and `stripe-webhook` are the
-only readers.
+Then set `VITE_BILLING_CHECKOUT_ENABLED=true` for the frontend build.
 
-## Checkout flow
+## Checkout
 
-1. Client calls `create-checkout` (authenticated, via `supabase.functions.invoke`).
-2. The function looks up (or creates) a Stripe Customer for the signed-in user, tagging
-   it with `metadata.porygen_user_id` and, if configured, `metadata.apex_customer_id`.
-   The Stripe Customer ID is persisted to `billing_customers` via the **service role**
-   (this table has no client-facing write policy — see [SECURITY.md](SECURITY.md)).
-3. It creates a Checkout Session (`mode=payment`, the configured Price, quantity 1),
-   tagged with the same metadata, `success_url` →
-   `/billing/success?session_id={CHECKOUT_SESSION_ID}`, `cancel_url` → `/pricing`.
-4. The browser redirects to `session.url`.
+`create-checkout` requires `{ "plan": "pro" | "team" | "apex_dogfood" }`:
 
-Reaching `/billing/success` is **not** treated as proof of payment anywhere in the UI —
-the success page explicitly checks whether a matching `billing_events` row (written only
-by the verified webhook) exists yet.
+| Plan | Mode | Price from | Metadata |
+|---|---|---|---|
+| `pro` | subscription | `STRIPE_PRICE_PRO_MONTHLY` | session and `subscription_data`: `porygen_user_id`, `porygen_plan=pro` |
+| `team` | subscription | `STRIPE_PRICE_TEAM_MONTHLY` | same, `porygen_plan=team` |
+| `apex_dogfood` | payment | `STRIPE_APEX_DOGFOOD_PRICE_ID` → `STRIPE_PRO_PRICE_ID` | `porygen_plan=apex_dogfood`, plus `apex_customer_id` when configured |
+
+It reuses or creates the Stripe Customer (service-role write to `billing_customers`), never
+creates Prices at checkout time, and returns `session.url`. Missing plan → `400 PLAN_REQUIRED`;
+missing key → `501 STRIPE_NOT_CONFIGURED`; missing price → `501 PLAN_NOT_CONFIGURED`.
+
+The APEX SKU is tagged `apex_dogfood` (it was tagged `pro` before plan separation) so a test
+payment can never be mistaken for a Pro subscription.
 
 ## Webhook
 
-Configure a Stripe webhook endpoint pointing at
-`https://<project-ref>.functions.supabase.co/stripe-webhook`, subscribed to at minimum
-`checkout.session.completed`. `stripe-webhook`:
+Endpoint: `https://<project-ref>.functions.supabase.co/stripe-webhook`. Subscribe to
+`checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`,
+`customer.subscription.deleted`.
 
-- Verifies `Stripe-Signature` by hand (HMAC-SHA256 over `${timestamp}.${rawBody}`,
-  constant-time comparison) — no Stripe SDK dependency for one check.
-- Resolves `user_id` from the event's metadata or, failing that, a `billing_customers`
-  lookup by Stripe Customer ID.
-- Fetches the Checkout Session's line items to record the Price ID actually charged.
-- Inserts into `billing_events` with `stripe_event_id` **unique** — a replayed or
-  duplicate-delivered webhook is detected via the resulting `23505` unique-violation and
-  answered `{"received": true, "idempotent": true}` rather than creating a second row or
-  double-processing anything.
+`stripe-webhook` verifies the signature against the raw body, resolves the user from metadata or
+the customer, records the charged Price for completed checkouts, and inserts `billing_events`
+idempotently (unique `stripe_event_id`). `payload_summary_json` holds only non-secret fields,
+now including `porygen_plan`, checkout `mode`, and `subscription_status`.
 
-## Diagnostic flow
+## Plan derivation
 
-`/billing/diagnostics` in the app calls the `billing-diagnostics` Edge Function, which
-returns only non-secret state: whether Stripe is configured, sandbox vs. live, the
-Stripe account ID (fetched live via `GET /v1/account`), the configured Price ID, whether
-a webhook secret is set, and the configured (or missing) APEX customer ID. Combined with
-`billing_customers`/`billing_events` rows (read client-side, RLS-scoped to the signed-in
-user), this is enough to diagnose the whole path — Stripe Customer ID, latest Checkout
-Session ID, latest PaymentIntent ID, latest Stripe event ID, webhook processed state —
-without querying the database directly.
+`src/lib/entitlements.ts#derivePlan` replays verified events: a `pro`/`team` subscription
+checkout or an active/trialing subscription update sets the plan; deletion or an ended status
+returns to Free; `apex_dogfood` or untagged completions never grant a plan (they count as APEX
+test purchases). Limits are displayed, not enforced, during early access.
+
+## Diagnostics
+
+`/billing/diagnostics` (via `billing-diagnostics`) shows: key configured, environment, account
+ID, webhook secret, **subscription price status** (Pro, Team), the APEX price and customer ID,
+completed APEX test checkouts, and this account's Stripe linkage. Secrets never leave the server.

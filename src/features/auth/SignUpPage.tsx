@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { BitCritter } from "../../components/BitCritter";
 import { useAuth } from "./AuthContext";
-import "./auth.css";
+import { AuthArt } from "./AuthArt";
+import { useDocumentTitle } from "../../components/useDocumentTitle";
 
 export function SignUpPage() {
+  useDocumentTitle("Create an account — PoryGen");
   const { signUp, configured } = useAuth();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -26,84 +27,84 @@ export function SignUpPage() {
     setSubmitted(true);
   }
 
-  if (submitted) {
-    return (
-      <div className="pg-shell pg-auth-wrap">
-        <div className="pg-auth-card" style={{ textAlign: "center" }}>
-          <BitCritter state="ingesting" size={56} />
-          <h1 style={{ fontSize: "1.15rem", marginTop: 16 }}>Check your inbox</h1>
-          <p style={{ marginTop: 10, color: "var(--pg-structure-dim)", fontSize: "0.88rem" }}>
-            We sent a confirmation link to {email}. Once confirmed, sign in to feed your first repository.
-          </p>
-          <Link to="/sign-in" className="pg-btn pg-btn-primary" style={{ marginTop: 20, display: "inline-flex" }}>
-            Go to sign in
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="pg-shell pg-auth-wrap">
-      <div className="pg-auth-card">
-        <div className="pg-auth-head">
-          <BitCritter state="idle" size={48} />
-          <h1 style={{ fontSize: "1.2rem" }}>Create your account</h1>
+    <div className="auth">
+      <AuthArt />
+      <div className="auth-panel">
+        <div className="auth-card">
+          {submitted ? (
+            <>
+              <h1>Check your inbox.</h1>
+              <p>
+                PoryGen sent a confirmation link to <strong>{email}</strong>. Confirm it, sign in, and scan your first repository.
+              </p>
+              <p className="cta-row">
+                <Link to="/sign-in" className="btn btn-primary">
+                  Go to sign in
+                </Link>
+              </p>
+            </>
+          ) : (
+            <>
+              <h1>Scan your first repo.</h1>
+              <p>Free for one public repository. No credit card.</p>
+
+              {!configured && (
+                <p className="notice notice-warn">
+                  Accounts aren't available in this environment: Supabase isn't configured. The <Link to="/demo">live demo</Link>{" "}
+                  works without one.
+                </p>
+              )}
+
+              <form className="auth-form" onSubmit={onSubmit}>
+                <div className="field">
+                  <label className="label" htmlFor="displayName">
+                    Name <span className="hint">(optional)</span>
+                  </label>
+                  <input id="displayName" name="name" type="text" className="input" autoComplete="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="email">
+                    Email
+                  </label>
+                  <input id="email" name="email" type="email" className="input" required autoComplete="email" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="password">
+                    Password
+                  </label>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    className="input"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    aria-describedby="password-hint"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <p id="password-hint" className="hint">
+                    At least 8 characters.
+                  </p>
+                </div>
+                {error && (
+                  <p className="notice notice-error" role="alert">
+                    {error}
+                  </p>
+                )}
+                <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !configured}>
+                  {submitting ? "Creating account…" : "Create account"}
+                </button>
+              </form>
+
+              <p className="auth-switch">
+                Already have an account? <Link to="/sign-in">Sign in</Link>
+              </p>
+            </>
+          )}
         </div>
-
-        {!configured && (
-          <div className="pg-form-error" style={{ marginBottom: 16 }}>
-            Supabase is not configured in this environment — account creation is unavailable until
-            VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY are set.
-          </div>
-        )}
-
-        <form className="pg-auth-form" onSubmit={onSubmit}>
-          <div className="pg-field">
-            <label className="pg-label" htmlFor="displayName">Display name</label>
-            <input
-              id="displayName"
-              type="text"
-              className="pg-input"
-              autoComplete="name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-            />
-          </div>
-          <div className="pg-field">
-            <label className="pg-label" htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              className="pg-input"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="pg-field">
-            <label className="pg-label" htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              className="pg-input"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          {error && <div className="pg-form-error" role="alert">{error}</div>}
-          <button type="submit" className="pg-btn pg-btn-primary pg-btn-block" disabled={submitting || !configured}>
-            {submitting ? "creating account…" : "create account"}
-          </button>
-        </form>
-
-        <p className="pg-auth-switch">
-          Already have an account? <Link to="/sign-in">Sign in</Link>
-        </p>
       </div>
     </div>
   );

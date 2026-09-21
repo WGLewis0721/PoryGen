@@ -1,85 +1,106 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { BitCritter, type BitCritterState } from "../../components/BitCritter";
-import { PolicyBadge } from "../../components/PolicyBadge";
-import { getScan, getRepository, listFindings } from "../../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ToneTag } from "../../components/Tags";
+import { useDocumentTitle } from "../../components/useDocumentTitle";
+import { feedRepository, getRepository, getScan, listFindings } from "../../lib/api";
 import type { RepositoryRow, ScanFindingRow, ScanRow } from "../../lib/dbTypes";
-import type { PolicyStatus } from "@porygen/provenance-core";
+import { describeFinding, percent, TYPE_LABEL } from "../../lib/findingVocabulary";
+import { formatDateTime, riskTone, RISK_LABEL } from "../../lib/format";
 
 const STATUS_LABEL: Record<ScanRow["status"], string> = {
-  queued: "queued",
-  ingesting: "ingesting repository",
-  indexing: "indexing source files",
-  normalizing_ast: "normalizing AST",
-  fingerprinting: "computing structural fingerprints",
-  analyzing_licenses: "analyzing licenses",
-  building_provenance_summary: "building provenance summary",
-  complete: "complete",
-  failed: "failed",
+  queued: "Queued",
+  ingesting: "Fetching the repository",
+  indexing: "Reading files",
+  normalizing_ast: "Normalizing structure",
+  fingerprinting: "Fingerprinting and comparing",
+  analyzing_licenses: "Checking licenses",
+  building_provenance_summary: "Preparing results",
+  complete: "Complete",
+  failed: "Failed",
 };
 
-const IN_PROGRESS: ScanRow["status"][] = [
-  "queued", "ingesting", "indexing", "normalizing_ast", "fingerprinting",
-  "analyzing_licenses", "building_provenance_summary",
+const ORDER: ScanRow["status"][] = [
+  "queued",
+  "ingesting",
+  "indexing",
+  "normalizing_ast",
+  "fingerprinting",
+  "analyzing_licenses",
+  "building_provenance_summary",
+  "complete",
 ];
 
-function riskToPolicy(risk: ScanRow["risk_level"]): PolicyStatus {
-  if (risk === "clear") return "CLEAR";
-  if (risk === "review") return "REVIEW";
-  if (risk === "blocking") return "BLOCKING";
-  return "UNKNOWN";
+const IN_PROGRESS = ORDER.slice(0, -1);
+
+const LEGACY_CLAIM = "Structural fingerprint match against PoryGen's configured reference corpus — not a search of GitHub or the open internet.";
+
+function FindingRow({ finding, scanId }: { finding: ScanFindingRow; scanId: string }) {
+  const d = describeFinding(finding);
+  const evidence = finding.evidence_json ?? {};
+  const score = finding.type === "structural_similarity" ? percent((evidence.containment as number | undefined) ?? finding.confidence) : null;
+  return (
+    <li className="row">
+      <ToneTag tone={d.tone}>{d.label}</ToneTag>
+      <div className="row-main">
+        <Link className="row-title" to={`/scans/${scanId}/findings/${finding.id}`}>
+          {finding.type === "structural_similarity" ? finding.file_path : finding.title}
+        </Link>
+        <span className="row-meta">
+          {TYPE_LABEL[finding.type]}
+          {finding.type === "structural_similarity" ? ` · ${finding.title}` : finding.file_path ? ` · ${finding.file_path}` : ""}
+        </span>
+      </div>
+      {score && (
+        <div className="row-side">
+          <span className="row-meta">{score} similar</span>
+        </div>
+      )}
+    </li>
+  );
 }
 
-// <!-- OPUS_TASK: Scanner physiological choreography
-// Current behavior: critterStateFor() maps scan.status/risk_level directly to one of
-// BitCritter's six CSS-driven states; each state's autonomic animation (breathing,
-// blink, scanline, glitch) is already implemented and reduced-motion-safe.
-// Desired improvement: richer physical behavior keyed to scan *microstates* (e.g. a
-// distinct beat when analyzing_licenses finds something) and terminal-output rhythm
-// synchronized to it.
-// Implementation constraints: event-driven and deterministic — no random animation
-// loops; drive transitions off real scan.status changes, not timers.
-// Reduced-motion requirement: must not regress the existing prefers-reduced-motion
-// handling in BitCritter.css.
-// Completion criteria: the page functions identically with this incomplete — it is
-// additive choreography, not required behavior. -->
-function critterStateFor(scan: ScanRow | null): BitCritterState {
-  if (!scan) return "idle";
-  if (scan.status === "failed") return "integrity_warning";
-  if (IN_PROGRESS.includes(scan.status)) return "ingesting";
-  if (scan.risk_level === "blocking") return "blocking";
-  if (scan.risk_level === "review") return "review";
-  return "healthy";
-}
-
+/** Keyed by scan so moving to a rescan starts from a clean slate. */
 export function ScanPage() {
   const { scanId } = useParams<{ scanId: string }>();
+  return scanId ? <ScanView key={scanId} scanId={scanId} /> : null;
+}
+
+function ScanView({ scanId }: { scanId: string }) {
+  const navigate = useNavigate();
   const [scan, setScan] = useState<ScanRow | null>(null);
   const [repository, setRepository] = useState<RepositoryRow | null>(null);
   const [findings, setFindings] = useState<ScanFindingRow[]>([]);
-  const [severityFilter, setSeverityFilter] = useState<"all" | ScanFindingRow["severity"]>("all");
   const [error, setError] = useState<string | null>(null);
+  const [rescanning, setRescanning] = useState(false);
+  useDocumentTitle(`${repository?.name ?? "Scan"} — PoryGen`);
 
   useEffect(() => {
-    if (!scanId) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
+    let repoLoaded = false;
 
     async function poll() {
       try {
-        const next = await getScan(scanId!);
+        const next = await getScan(scanId);
         if (cancelled) return;
+        if (!next) {
+          setError("This scan doesn't exist, or you don't have access to it.");
+          return;
+        }
         setScan(next);
-        if (next && !repository) {
+        if (!repoLoaded) {
+          repoLoaded = true;
           getRepository(next.repository_id).then((r) => !cancelled && setRepository(r));
         }
-        if (next && next.status === "complete") {
-          listFindings(scanId!).then((f) => !cancelled && setFindings(f));
-        } else if (next && IN_PROGRESS.includes(next.status)) {
+        if (next.status === "complete") {
+          const rows = await listFindings(scanId);
+          if (!cancelled) setFindings(rows);
+        } else if (IN_PROGRESS.includes(next.status)) {
           timer = setTimeout(poll, 900);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load scan.");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load this scan.");
       }
     }
     poll();
@@ -87,130 +108,197 @@ export function ScanPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanId]);
 
-  if (error) return <div className="pg-form-error">{error}</div>;
-  if (!scan) return <p style={{ color: "var(--pg-structure-dim)" }}>loading scan…</p>;
+  const grouped = useMemo(() => {
+    const attention = findings.filter((f) => describeFinding(f).actionable);
+    const info = findings.filter((f) => !describeFinding(f).actionable);
+    const rank = (f: ScanFindingRow) => ({ strong: 0, review: 1 } as Record<string, number>)[describeFinding(f).tone] ?? 2;
+    attention.sort((a, b) => rank(a) - rank(b));
+    return { attention, info };
+  }, [findings]);
+
+  if (error) return <p className="notice notice-error">{error}</p>;
+  if (!scan) {
+    return (
+      <div className="page-loading" role="status">
+        Loading scan…
+      </div>
+    );
+  }
 
   const inProgress = IN_PROGRESS.includes(scan.status);
-  const terminalLog: string[] = scan.summary_json?.terminalLog ?? [];
-  const filteredFindings = severityFilter === "all" ? findings : findings.filter((f) => f.severity === severityFilter);
+  const stepIndex = Math.max(0, ORDER.indexOf(scan.status));
+  const summary = scan.summary_json;
+  const coverage = summary?.coverage ?? [];
+  const canRescan = repository?.provider === "github" && !repository.is_demo;
+
+  async function rescan() {
+    if (!repository) return;
+    setRescanning(true);
+    try {
+      const { scanId: next } = await feedRepository(repository.clone_url);
+      navigate(`/scans/${next}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start a rescan.");
+    } finally {
+      setRescanning(false);
+    }
+  }
 
   return (
     <div>
-      <div className="pg-page-header">
+      <Link to="/repositories" className="back-link">
+        <ArrowLeft aria-hidden="true" /> Repositories
+      </Link>
+      <header className="page-head">
         <div>
           <h1>{repository?.name ?? "Scan"}</h1>
-          <p>{repository?.clone_url}</p>
+          <p>
+            {repository?.is_demo ? "Public sample repository · " : ""}
+            Scan started {formatDateTime(scan.started_at)}
+            {repository?.default_branch ? ` · ${repository.default_branch}` : ""}
+          </p>
         </div>
         {scan.status === "complete" && (
-          <div className="pg-page-actions">
-            <Link to={`/scans/${scan.id}/evidence`} className="pg-btn pg-btn-primary">Export evidence</Link>
+          <div className="page-actions">
+            {canRescan && (
+              <button type="button" className="btn btn-secondary" onClick={rescan} disabled={rescanning}>
+                <RefreshCw aria-hidden="true" /> {rescanning ? "Starting…" : "Rescan"}
+              </button>
+            )}
+            <Link to={`/scans/${scan.id}/evidence`} className="btn btn-secondary">
+              Export evidence
+            </Link>
           </div>
         )}
-      </div>
+      </header>
 
-      <div className="pg-panel" style={{ padding: 24, marginBottom: 32, display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
-        <BitCritter state={critterStateFor(scan)} size={72} />
-        <div>
-          <div style={{ fontSize: "0.75rem", color: "var(--pg-structure-faint)", textTransform: "uppercase" }}>Scan status</div>
-          <div style={{ marginTop: 6, fontSize: "0.95rem", fontWeight: 700 }}>
-            {STATUS_LABEL[scan.status]}
-            {inProgress && <span aria-hidden="true"> …</span>}
-          </div>
-          <div role="status" aria-live="polite" className="pg-visually-hidden">
-            Scan status: {STATUS_LABEL[scan.status]}
-          </div>
-        </div>
-        {scan.status === "complete" && scan.risk_level && (
-          <div style={{ marginLeft: "auto" }}>
-            <PolicyBadge status={riskToPolicy(scan.risk_level)} />
+      <div className="scan-status">
+        {scan.status === "complete" && scan.risk_level ? (
+          <ToneTag tone={riskTone(scan.risk_level)}>{RISK_LABEL[scan.risk_level]}</ToneTag>
+        ) : null}
+        <span className="scan-status-text">{STATUS_LABEL[scan.status]}</span>
+        {inProgress && (
+          <div className="progress" aria-hidden="true">
+            <span style={{ transform: `scaleX(${(stepIndex + 1) / ORDER.length})` }} />
           </div>
         )}
+        <span className="visually-hidden" role="status" aria-live="polite">
+          Scan status: {STATUS_LABEL[scan.status]}
+        </span>
       </div>
 
-      <h2 className="pg-section-title">Terminal</h2>
-      <div className="pg-terminal" aria-live="polite">
-        {terminalLog.map((line, i) => (
-          <span className="pg-terminal-line" key={i}>{line}</span>
-        ))}
-        {inProgress && <span className="pg-terminal-line pg-terminal-dim">…</span>}
-      </div>
+      {scan.status === "failed" && (
+        <p className="notice notice-error block-notice">
+          The scan failed{scan.error_code ? ` (${scan.error_code})` : ""}. The log below has the detail.
+        </p>
+      )}
 
       {scan.status === "complete" && (
         <>
-          <div className="pg-stat-grid" style={{ marginTop: 32 }}>
-            <div className="pg-stat-cell">
-              <div className="pg-stat-value">{scan.files_scanned}</div>
-              <div className="pg-stat-label">Files scanned</div>
-            </div>
-            <div className="pg-stat-cell">
-              <div className="pg-stat-value">{scan.dependencies_scanned}</div>
-              <div className="pg-stat-label">Dependencies scanned</div>
-            </div>
-            <div className="pg-stat-cell">
-              <div className="pg-stat-value">{scan.summary_json?.referenceFingerprintsChecked ?? 0}</div>
-              <div className="pg-stat-label">Fingerprints retained</div>
-            </div>
-            <div className="pg-stat-cell">
-              <div className="pg-stat-value">{scan.summary_json?.blockingFindings ?? 0}</div>
-              <div className="pg-stat-label">Blocking findings</div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 40, marginBottom: 16 }}>
-            <h2 className="pg-section-title" style={{ margin: 0 }}>Findings ({findings.length})</h2>
-            <select
-              className="pg-select"
-              aria-label="Filter findings by severity"
-              value={severityFilter}
-              onChange={(e) => setSeverityFilter(e.target.value as typeof severityFilter)}
-            >
-              <option value="all">all severities</option>
-              <option value="blocking">blocking</option>
-              <option value="review">review</option>
-              <option value="info">info / clear</option>
-            </select>
-          </div>
-
-          {filteredFindings.length === 0 ? (
-            <div className="pg-empty-state">
-              <BitCritter state="healthy" size={48} />
-              <p>No findings at this severity.</p>
-            </div>
+          {summary?.similarity ? (
+            <ul className="today block" aria-label="Files by result">
+              <li className="today-item">
+                <div className="today-cell">
+                  <ToneTag tone="clear">Clear</ToneTag>
+                  <span className="today-value">{summary.similarity.clear}</span>
+                </div>
+              </li>
+              <li className="today-item">
+                <div className="today-cell">
+                  <ToneTag tone="common">Common pattern</ToneTag>
+                  <span className="today-value">{summary.similarity.commonPattern}</span>
+                </div>
+              </li>
+              <li className="today-item">
+                <div className="today-cell">
+                  <ToneTag tone="review">Review suggested</ToneTag>
+                  <span className="today-value">{summary.similarity.reviewSuggested}</span>
+                </div>
+              </li>
+              <li className="today-item">
+                <div className="today-cell">
+                  <ToneTag tone="strong">Strong source match</ToneTag>
+                  <span className="today-value">{summary.similarity.strongMatch}</span>
+                </div>
+              </li>
+            </ul>
           ) : (
-            <table className="pg-table">
-              <thead>
-                <tr>
-                  <th>Finding</th>
-                  <th>Type</th>
-                  <th>Severity</th>
-                  <th>File</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFindings.map((finding) => (
-                  <tr key={finding.id}>
-                    <td><Link to={`/scans/${scan.id}/findings/${finding.id}`}>{finding.title}</Link></td>
-                    <td>{finding.type.replace("_", " ")}</td>
-                    <td>
-                      <PolicyBadge status={finding.severity === "blocking" ? "BLOCKING" : finding.severity === "review" ? "REVIEW" : "CLEAR"} />
-                    </td>
-                    <td>{finding.file_path ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="kv block">
+              <div className="kv-cell">
+                <div className="kv-key">Files checked</div>
+                <div className="kv-value">{scan.files_scanned}</div>
+              </div>
+              <div className="kv-cell">
+                <div className="kv-key">Dependencies checked</div>
+                <div className="kv-value">{scan.dependencies_scanned}</div>
+              </div>
+              <div className="kv-cell">
+                <div className="kv-key">Needs attention</div>
+                <div className="kv-value">{grouped.attention.length}</div>
+              </div>
+            </div>
           )}
+
+          <section className="block" aria-labelledby="scan-attention">
+            <div className="block-head">
+              <h2 id="scan-attention" className="block-title">
+                Needs attention ({grouped.attention.length})
+              </h2>
+            </div>
+            {grouped.attention.length === 0 ? (
+              <p className="muted">Nothing here needs a person. Every checked file came back clear or informational.</p>
+            ) : (
+              <ul className="rows">
+                {grouped.attention.map((f) => (
+                  <FindingRow key={f.id} finding={f} scanId={scan.id} />
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {grouped.info.length > 0 && (
+            <section className="block" aria-labelledby="scan-info">
+              <details className="log-details">
+                <summary id="scan-info">Informational ({grouped.info.length}) — clear licenses and common patterns</summary>
+                <ul className="rows">
+                  {grouped.info.map((f) => (
+                    <FindingRow key={f.id} finding={f} scanId={scan.id} />
+                  ))}
+                </ul>
+              </details>
+            </section>
+          )}
+
+          <section className="block" aria-labelledby="scan-coverage">
+            <h2 id="scan-coverage" className="block-title">
+              What this scan compared against
+            </h2>
+            <div className="coverage-box block-gap">
+              {coverage.length > 0 ? (
+                coverage.map((c) => (
+                  <p key={c.providerId}>
+                    <strong>{c.providerName}.</strong> {c.claim}
+                  </p>
+                ))
+              ) : (
+                <p>{LEGACY_CLAIM}</p>
+              )}
+              {summary?.findingsTruncated && <p>Some informational rows were omitted to keep this scan readable.</p>}
+            </div>
+          </section>
         </>
       )}
 
-      {scan.status === "failed" && (
-        <div className="pg-form-error" style={{ marginTop: 24 }}>
-          Scan failed{scan.error_code ? ` (${scan.error_code})` : ""}. See the terminal log above for detail.
-        </div>
-      )}
+      <section className="block">
+        <details className="log-details" open={inProgress || scan.status === "failed"}>
+          <summary>Scan log</summary>
+          <pre className="log" aria-live={inProgress ? "polite" : undefined}>
+            {(summary?.terminalLog ?? []).join("\n") || "Waiting for the first step…"}
+          </pre>
+        </details>
+      </section>
     </div>
   );
 }

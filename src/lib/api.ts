@@ -6,11 +6,39 @@ import type {
   ProvenanceEventRow,
   BillingCustomerRow,
   BillingEventRow,
+  TrackedFindingRow,
+  FindingResolutionRow,
+  TrackedStatus,
 } from "./dbTypes";
+import type { UserAction } from "./resolution";
 
 function requireClient() {
   if (!supabase) throw new Error("Supabase is not configured in this environment.");
   return supabase;
+}
+
+/** Thrown when a feature's tables/functions aren't deployed yet (resolution-history migration pending). */
+export class FeatureUnavailableError extends Error {
+  constructor(feature: string) {
+    super(`${feature} isn't enabled on this deployment yet.`);
+    this.name = "FeatureUnavailableError";
+  }
+}
+
+interface PostgrestLikeError {
+  code?: string;
+  message?: string;
+}
+
+/** 42P01 undefined_table / 42883 undefined_function from Postgres; PGRST202/205 from PostgREST's schema cache. */
+export function isMissingRelation(error: PostgrestLikeError | null | undefined): boolean {
+  if (!error) return false;
+  return ["42P01", "42883", "PGRST202", "PGRST205"].includes(error.code ?? "");
+}
+
+function rethrow(error: PostgrestLikeError, feature: string): never {
+  if (isMissingRelation(error)) throw new FeatureUnavailableError(feature);
+  throw error;
 }
 
 export async function listRepositories(): Promise<RepositoryRow[]> {
@@ -88,6 +116,96 @@ export async function listScansForRepository(repositoryId: string): Promise<Scan
   return data as ScanRow[];
 }
 
+export async function listLatestScans(limit = 20): Promise<ScanRow[]> {
+  const { data, error } = await requireClient()
+    .from("scans")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data as ScanRow[];
+}
+
+export async function listFindingsForScans(scanIds: string[]): Promise<ScanFindingRow[]> {
+  if (scanIds.length === 0) return [];
+  const { data, error } = await requireClient().from("scan_findings").select("*").in("scan_id", scanIds);
+  if (error) throw error;
+  return data as ScanFindingRow[];
+}
+
+/** The user's own scans since `since` (the public sample repository's scans are readable too, so filter by owner). Display only. */
+export async function countScansSince(ownerId: string, since: Date): Promise<number> {
+  const { count, error } = await requireClient()
+    .from("scans")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", ownerId)
+    .gte("created_at", since.toISOString());
+  if (error) throw error;
+  return count ?? 0;
+}
+
+const RESOLUTION_FEATURE = "Resolution history";
+
+export async function listTrackedFindings(filter: { repositoryId?: string; statuses?: TrackedStatus[] } = {}): Promise<TrackedFindingRow[]> {
+  let query = requireClient().from("tracked_findings").select("*").order("updated_at", { ascending: false });
+  if (filter.repositoryId) query = query.eq("repository_id", filter.repositoryId);
+  if (filter.statuses?.length) query = query.in("status", filter.statuses);
+  const { data, error } = await query;
+  if (error) rethrow(error, RESOLUTION_FEATURE);
+  return data as TrackedFindingRow[];
+}
+
+export async function getTrackedFindingByKey(repositoryId: string, findingKey: string): Promise<TrackedFindingRow | null> {
+  const { data, error } = await requireClient()
+    .from("tracked_findings")
+    .select("*")
+    .eq("repository_id", repositoryId)
+    .eq("finding_key", findingKey)
+    .maybeSingle();
+  if (error) rethrow(error, RESOLUTION_FEATURE);
+  return data as TrackedFindingRow | null;
+}
+
+export async function listFindingResolutions(trackedFindingId: string): Promise<FindingResolutionRow[]> {
+  const { data, error } = await requireClient()
+    .from("finding_resolutions")
+    .select("*")
+    .eq("tracked_finding_id", trackedFindingId)
+    .order("created_at", { ascending: true });
+  if (error) rethrow(error, RESOLUTION_FEATURE);
+  return data as FindingResolutionRow[];
+}
+
+export interface ResolutionActivity extends FindingResolutionRow {
+  tracked_findings: Pick<TrackedFindingRow, "title" | "file_path" | "repository_id" | "latest_finding_id" | "last_seen_scan_id"> | null;
+}
+
+export async function listRecentResolutions(limit = 12): Promise<ResolutionActivity[]> {
+  const { data, error } = await requireClient()
+    .from("finding_resolutions")
+    .select("*, tracked_findings(title, file_path, repository_id, latest_finding_id, last_seen_scan_id)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) rethrow(error, RESOLUTION_FEATURE);
+  return data as ResolutionActivity[];
+}
+
+export async function recordFindingAction(params: {
+  trackedFindingId: string;
+  action: UserAction;
+  note?: string | null;
+  revision?: string | null;
+}): Promise<TrackedFindingRow> {
+  const { data, error } = await requireClient().rpc("record_finding_action", {
+    p_tracked_finding_id: params.trackedFindingId,
+    p_action: params.action,
+    p_note: params.note ?? null,
+    p_revision: params.revision ?? null,
+  });
+  if (error) rethrow(error, RESOLUTION_FEATURE);
+  return data as TrackedFindingRow;
+}
+
 export async function listProvenanceEvents(repositoryId: string): Promise<ProvenanceEventRow[]> {
   const { data, error } = await requireClient()
     .from("provenance_events")
@@ -122,10 +240,17 @@ export interface BillingDiagnostics {
   stripeConfigured: boolean;
   stripeEnvironment: "sandbox/test" | "live" | "unknown";
   stripeAccountId: string | null;
+  /** Legacy field: the APEX dogfood one-time price (formerly labelled "Pro"). */
   stripeProPriceId: string | null;
   webhookSecretConfigured: boolean;
   apexCustomerIdConfigured: boolean;
   apexCustomerId: string | null;
+  /** Present once billing-diagnostics is redeployed with plan separation. */
+  prices?: {
+    proMonthly: string | null;
+    teamMonthly: string | null;
+    apexDogfood: string | null;
+  };
 }
 
 export async function getBillingDiagnostics(): Promise<BillingDiagnostics> {
@@ -135,9 +260,11 @@ export async function getBillingDiagnostics(): Promise<BillingDiagnostics> {
   return data as BillingDiagnostics;
 }
 
-export async function createCheckoutSession(): Promise<{ url: string } | { error: string; code?: string }> {
+export type CheckoutPlan = "pro" | "team" | "apex_dogfood";
+
+export async function createCheckoutSession(plan: CheckoutPlan): Promise<{ url: string } | { error: string; code?: string }> {
   const client = requireClient();
-  const { data, error } = await client.functions.invoke("create-checkout", { body: {} });
+  const { data, error } = await client.functions.invoke("create-checkout", { body: { plan } });
   if (error) {
     const context = (error as { context?: { json?: () => Promise<{ error?: string; code?: string }> } }).context;
     if (context?.json) {

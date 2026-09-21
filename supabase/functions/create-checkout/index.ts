@@ -1,13 +1,21 @@
-// create-checkout: creates (or reuses) a real Stripe Customer for the signed-in
-// PoryGen user, then creates a real Stripe Checkout Session for the PoryGen
-// Pro Scan Pack. All Stripe calls are server-side; the secret key never
-// reaches the browser.
+// create-checkout: creates (or reuses) a Stripe Customer for the signed-in
+// PoryGen user, then a Stripe Checkout Session for one of:
+//
+//   plan = "pro" | "team"  → a monthly subscription (customer plans)
+//   plan = "apex_dogfood"  → the $19 one-time APEX dogfood test SKU
+//
+// The two are deliberately separate. Customer plans read their Price IDs from
+// STRIPE_PRICE_PRO_MONTHLY / STRIPE_PRICE_TEAM_MONTHLY and fail closed with
+// PLAN_NOT_CONFIGURED when unset. The APEX SKU reads
+// STRIPE_APEX_DOGFOOD_PRICE_ID (falling back to the legacy STRIPE_PRO_PRICE_ID)
+// and is tagged porygen_plan=apex_dogfood so it can never be mistaken for a
+// Pro subscription. All Stripe calls are server-side; the secret key never
+// reaches the browser. Payment state is only ever written by stripe-webhook.
 //
 // Two Supabase clients are used deliberately: `authed` (anon key + the
 // caller's JWT) only to identify who is asking, and `admin` (service role)
-// for the billing_customers write — billing linkage is not something a user
-// should be able to write directly via RLS, even to their own row, so this
-// table has no client-facing insert/update policy at all.
+// for the billing_customers write — that table has no client-facing write
+// policy at all.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -16,8 +24,30 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
-const STRIPE_PRO_PRICE_ID = Deno.env.get("STRIPE_PRO_PRICE_ID");
 const APEX_CUSTOMER_ID = Deno.env.get("APEX_CUSTOMER_ID");
+
+type Plan = "pro" | "team" | "apex_dogfood";
+
+interface PlanConfig {
+  priceId: string | undefined;
+  priceEnv: string;
+  mode: "subscription" | "payment";
+}
+
+function planConfig(plan: Plan): PlanConfig {
+  switch (plan) {
+    case "pro":
+      return { priceId: Deno.env.get("STRIPE_PRICE_PRO_MONTHLY"), priceEnv: "STRIPE_PRICE_PRO_MONTHLY", mode: "subscription" };
+    case "team":
+      return { priceId: Deno.env.get("STRIPE_PRICE_TEAM_MONTHLY"), priceEnv: "STRIPE_PRICE_TEAM_MONTHLY", mode: "subscription" };
+    case "apex_dogfood":
+      return {
+        priceId: Deno.env.get("STRIPE_APEX_DOGFOOD_PRICE_ID") ?? Deno.env.get("STRIPE_PRO_PRICE_ID"),
+        priceEnv: "STRIPE_APEX_DOGFOOD_PRICE_ID",
+        mode: "payment",
+      };
+  }
+}
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -47,11 +77,29 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  if (!STRIPE_SECRET_KEY || !STRIPE_PRO_PRICE_ID) {
+  let body: { plan?: unknown } = {};
+  try {
+    body = await req.json();
+  } catch {
+    // an empty body is handled as "no plan" below
+  }
+  const plan = body.plan;
+  if (plan !== "pro" && plan !== "team" && plan !== "apex_dogfood") {
+    return json({ error: "Choose a plan: pro, team, or apex_dogfood.", code: "PLAN_REQUIRED" }, 400);
+  }
+
+  if (!STRIPE_SECRET_KEY) {
+    return json({ error: "Stripe is not configured in this environment (STRIPE_SECRET_KEY missing).", code: "STRIPE_NOT_CONFIGURED" }, 501);
+  }
+  const config = planConfig(plan);
+  if (!config.priceId) {
     return json(
       {
-        error: "Stripe is not configured in this environment (STRIPE_SECRET_KEY / STRIPE_PRO_PRICE_ID missing).",
-        code: "STRIPE_NOT_CONFIGURED",
+        error:
+          plan === "apex_dogfood"
+            ? `The APEX dogfood price isn't configured (${config.priceEnv}).`
+            : `Checkout for the ${plan === "pro" ? "Pro" : "Team"} plan isn't open yet (${config.priceEnv} is not configured).`,
+        code: "PLAN_NOT_CONFIGURED",
       },
       501,
     );
@@ -69,13 +117,11 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  const { data: existing } = await admin
-    .from("billing_customers")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const { data: existing } = await admin.from("billing_customers").select("*").eq("user_id", user.id).maybeSingle();
 
   let stripeCustomerId = existing?.stripe_customer_id ?? null;
+  const apexMetadata: Record<string, string> =
+    plan === "apex_dogfood" && APEX_CUSTOMER_ID ? { "metadata[apex_customer_id]": APEX_CUSTOMER_ID } : {};
 
   if (!stripeCustomerId) {
     const customer = await stripeRequest("customers", {
@@ -96,18 +142,24 @@ Deno.serve(async (req: Request) => {
   }
 
   const origin = req.headers.get("origin") ?? new URL(req.url).origin;
-
-  const session = await stripeRequest("checkout/sessions", {
-    mode: "payment",
+  const form: Record<string, string> = {
+    mode: config.mode,
     customer: stripeCustomerId!,
-    "line_items[0][price]": STRIPE_PRO_PRICE_ID,
+    "line_items[0][price]": config.priceId,
     "line_items[0][quantity]": "1",
     success_url: `${origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/pricing`,
+    cancel_url: plan === "apex_dogfood" ? `${origin}/billing/diagnostics` : `${origin}/pricing`,
     "metadata[porygen_user_id]": user.id,
-    "metadata[porygen_plan]": "pro",
-    ...(APEX_CUSTOMER_ID ? { "metadata[apex_customer_id]": APEX_CUSTOMER_ID } : {}),
-  });
+    "metadata[porygen_plan]": plan,
+    ...apexMetadata,
+  };
+  if (config.mode === "subscription") {
+    // Subscription events carry their own metadata, so plan changes and
+    // cancellations can be attributed without another lookup.
+    form["subscription_data[metadata][porygen_user_id]"] = user.id;
+    form["subscription_data[metadata][porygen_plan]"] = plan;
+  }
 
+  const session = await stripeRequest("checkout/sessions", form);
   return json({ url: session.url, sessionId: session.id });
 });

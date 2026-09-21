@@ -33,7 +33,14 @@ const CONTENT_TYPES = {
   ".svg": "image/svg+xml",
   ".json": "application/json",
   ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
   ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".txt": "text/plain",
 };
 
 function cfFetch(path, init = {}) {

@@ -1,37 +1,28 @@
-// scan-repository: the real scanner vertical slice, running server-side.
+// scan-repository: authenticated entry point for a repository scan.
 //
-// Pipeline: ingest (safe GitHub fetch) -> index -> normalize (lexical
-// structural normalizer — see _shared/scanner and docs/SCANNER.md for why
-// this path doesn't use the tree-sitter reference implementation) ->
-// fingerprint (winnowing) -> analyze licenses -> build provenance summary ->
-// complete. Every phase transition is written to `scans.status` as it
-// happens, so the client's poll loop renders genuine progress, not a canned
-// animation.
+// This handler owns only what is specific to this runtime: auth, safe GitHub
+// ingestion (github.ts is the SSRF boundary), and persistence. The scan itself
+// — normalize, fingerprint, compare through similarity providers, license
+// context, finding drafts — is `runScanPipeline` from the vendored
+// provenance-core (see _shared/ and scripts/sync-vendored-copies.mjs), the same
+// code a worker, CI job, or local run uses. Every phase is written to
+// `scans.status` as it happens, so the client shows genuine progress.
 //
-// Auth: this function forwards the caller's own JWT to the Supabase client,
-// so every insert runs through Row Level Security as that user — no
-// service-role key is used or needed here.
+// Auth: scans and findings are written with the caller's own JWT, so Row Level
+// Security applies to every insert. Only the resolution-history reconciliation
+// (`sync_tracked_findings`) runs with the service role, because tracked
+// findings and their history are server-authoritative: no client can mark a
+// finding resolved without a scan that actually re-checked it.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import {
-  detectLanguage,
-  lexicalNormalize,
-} from "./_shared/scanner/lexicalNormalize.ts";
-import { fingerprintTokens } from "./_shared/scanner/winnow.ts";
-import { matchAgainstCorpus } from "./_shared/scanner/corpus.ts";
-import {
-  scanLicenseFiles,
-  evaluateDependencyLicenses,
-  createRegistryLicenseLookup,
-  summarizePolicy,
-  policyForLicense,
-} from "./_shared/scanner/license.ts";
-import { sha256Hex, shortHash } from "./_shared/fingerprint.ts";
-import { buildCycloneDxSbom } from "./_shared/sbom.ts";
-import { parseGitHubUrl, fetchRepoMetadata, fetchRepoFiles, IngestError } from "./github.ts";
+import { runScanPipeline, type FindingDraft } from "./_shared/scanner/pipeline.ts";
+import { createReferenceCorpusProvider } from "./_shared/scanner/providers/referenceCorpus.ts";
+import { createRegistryLicenseLookup } from "./_shared/scanner/license.ts";
+import { parseGitHubUrl, fetchRepoMetadata, fetchRepoSnapshot, IngestError } from "./github.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -44,6 +35,12 @@ function json(body: unknown, status = 200) {
     status,
     headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
+}
+
+/** PostgREST reports an unknown column as PGRST204; Postgres as 42703. Either means the resolution migration isn't applied yet. */
+function isMissingColumn(error: { code?: string; message?: string } | null, column: string): boolean {
+  if (!error) return false;
+  return (error.code === "PGRST204" || error.code === "42703") && (error.message ?? "").includes(column);
 }
 
 Deno.serve(async (req: Request) => {
@@ -121,165 +118,80 @@ Deno.serve(async (req: Request) => {
   }
 
   const scanId = scan.id as string;
-  const terminalLog: string[] = ["[ingest] repository manifest accepted"];
+  const terminalLog: string[] = [`[ingest] ${meta.fullName}@${meta.defaultBranch} accepted`];
 
   const updateScan = (patch: Record<string, unknown>) =>
     supabase.from("scans").update(patch).eq("id", scanId);
 
   try {
-    // ---- index --------------------------------------------------------
     await updateScan({ status: "indexing" });
-    const files = await fetchRepoFiles(parsed, meta.defaultBranch);
-    const totalLoc = files.reduce((sum, f) => sum + f.content.split("\n").length, 0);
-    terminalLog.push(`[index] ${files.length} source files · ${totalLoc.toLocaleString()} LOC`);
+    const snapshot = await fetchRepoSnapshot(parsed, meta.defaultBranch);
+    const files = snapshot.files;
 
-    // ---- normalize AST (lexical structural normalizer) -----------------
-    await updateScan({ status: "normalizing_ast", files_scanned: files.length });
-    let totalTokens = 0;
-    const normalized = files.map((file) => {
-      const lang = detectLanguage(file.path);
-      const tokens = lexicalNormalize(file.content, lang);
-      totalTokens += tokens.length;
-      return { path: file.path, tokens };
+    const result = await runScanPipeline({
+      repositoryName: repository.name,
+      files,
+      providers: [createReferenceCorpusProvider()],
+      licenseLookup: createRegistryLicenseLookup(fetch),
+      terminalLog,
+      onPhase: async (phase, patch) => {
+        if (phase === "indexing") return; // already set before ingestion
+        await updateScan({ status: phase, ...patch });
+      },
     });
-    terminalLog.push(`[ast] ${totalTokens.toLocaleString()} syntax nodes normalized`);
 
-    // ---- fingerprint -----------------------------------------------------
-    await updateScan({ status: "fingerprinting" });
-    let totalFingerprints = 0;
-    const structuralFindings: Array<{
-      path: string;
-      entryId: string;
-      entryTitle: string;
-      entryLicense: string;
-      containment: number;
-    }> = [];
-    for (const file of normalized) {
-      const fps = fingerprintTokens(file.tokens);
-      totalFingerprints += fps.length;
-      if (fps.length === 0) continue;
-      const matches = matchAgainstCorpus(fps);
-      for (const match of matches) {
-        structuralFindings.push({
-          path: file.path,
-          entryId: match.entryId,
-          entryTitle: match.entryTitle,
-          entryLicense: match.entryLicense,
-          containment: match.containment,
-        });
+    let historyAvailable = true;
+    if (result.findings.length > 0) {
+      const rows = result.findings.map((draft: FindingDraft) => ({ scan_id: scanId, ...draft }));
+      let { error: findingsError } = await supabase.from("scan_findings").insert(rows);
+      if (isMissingColumn(findingsError, "finding_key")) {
+        historyAvailable = false;
+        ({ error: findingsError } = await supabase
+          .from("scan_findings")
+          .insert(rows.map(({ finding_key: _key, ...rest }) => rest)));
       }
-    }
-    terminalLog.push(`[winnow] ${totalFingerprints.toLocaleString()} fingerprints retained`);
-    terminalLog.push(
-      `[corpus] ${normalized.length} files evaluated against ${structuralFindings.length > 0 ? "matching" : "0 matching"} reference candidates`,
-    );
-
-    // ---- analyze licenses --------------------------------------------------
-    await updateScan({ status: "analyzing_licenses" });
-    const fileMap: Record<string, string> = {};
-    for (const f of files) fileMap[f.path.split("/").pop() === f.path ? f.path : f.path] = f.content;
-    // also index by basename for manifest lookups at repo root or nested
-    for (const f of files) {
-      const base = f.path.split("/").pop()!;
-      if (!(base in fileMap)) fileMap[base] = f.content;
-    }
-    const licenseFileFindings = scanLicenseFiles(fileMap);
-    const registryLookup = createRegistryLicenseLookup(fetch);
-    const dependencyFindings = await evaluateDependencyLicenses(fileMap, registryLookup);
-    const overallPolicy = summarizePolicy(licenseFileFindings, dependencyFindings);
-    const blockingLicense = dependencyFindings.find((d) => d.policy === "BLOCKING");
-    if (blockingLicense) {
-      terminalLog.push(`[license] ${blockingLicense.license} candidate found in dependency graph`);
-    } else {
-      terminalLog.push(`[license] ${dependencyFindings.length} dependencies evaluated`);
-    }
-    terminalLog.push(`[policy] ${overallPolicy === "CLEAR" ? "no blocking findings detected" : overallPolicy.toLowerCase() + " required"}`);
-
-    // ---- build provenance summary ------------------------------------------
-    await updateScan({ status: "building_provenance_summary", dependencies_scanned: dependencyFindings.length });
-
-    const findingsRows: Array<Record<string, unknown>> = [];
-
-    for (const finding of licenseFileFindings) {
-      findingsRows.push({
-        scan_id: scanId,
-        type: "license",
-        severity: policyForLicense(finding.detected) === "BLOCKING" ? "blocking" : policyForLicense(finding.detected) === "CLEAR" ? "info" : "review",
-        title: `${finding.detected} license file detected`,
-        file_path: finding.path,
-        evidence_json: { detected: finding.detected },
-        remediation: policyForLicense(finding.detected) === "CLEAR" ? null : "Review license terms against your distribution model.",
-      });
-    }
-
-    for (const dep of dependencyFindings.slice(0, 40)) {
-      findingsRows.push({
-        scan_id: scanId,
-        type: "license",
-        severity: dep.policy === "BLOCKING" ? "blocking" : dep.policy === "CLEAR" ? "info" : "review",
-        title: `${dep.ecosystem} dependency "${dep.name}" — ${dep.license}`,
-        file_path: null,
-        evidence_json: { name: dep.name, version: dep.version ?? null, ecosystem: dep.ecosystem, license: dep.license, source: dep.source },
-        remediation:
-          dep.policy === "BLOCKING"
-            ? `${dep.license} carries strong copyleft obligations under the default commercial policy — route to counsel review before distribution.`
-            : dep.policy === "REVIEW"
-              ? `${dep.license} carries weak copyleft obligations — confirm distribution model compliance.`
-              : null,
-      });
-    }
-
-    for (const match of structuralFindings.slice(0, 20)) {
-      findingsRows.push({
-        scan_id: scanId,
-        type: "structural_similarity",
-        severity: "review",
-        title: `Structural fingerprint match: ${match.entryTitle}`,
-        file_path: match.path,
-        confidence: Number(match.containment.toFixed(3)),
-        evidence_json: {
-          corpusEntryId: match.entryId,
-          corpusEntryLicense: match.entryLicense,
-          containment: match.containment,
-          note: "Structural fingerprint match against configured reference corpus.",
-        },
-        remediation: "Compare against the referenced corpus entry and confirm independent authorship or required attribution.",
-      });
-    }
-
-    if (findingsRows.length > 0) {
-      const { error: findingsError } = await supabase.from("scan_findings").insert(findingsRows);
       if (findingsError) throw new Error(`Could not persist findings: ${findingsError.message}`);
     }
-
-    const repoContentHash = await sha256Hex(
-      files.map((f) => `${f.path}:${f.bytes}`).sort().join("\n"),
-    );
-    const sbom = buildCycloneDxSbom(repository.name, dependencyFindings);
-
-    const summary = {
-      languages: Array.from(new Set(files.map((f) => detectLanguage(f.path)).filter((l) => l !== "unknown"))),
-      referenceFingerprintsChecked: totalFingerprints,
-      clearFindings: findingsRows.filter((f) => f.severity === "info").length,
-      reviewFindings: findingsRows.filter((f) => f.severity === "review").length,
-      blockingFindings: findingsRows.filter((f) => f.severity === "blocking").length,
-      provenanceCoveragePercent: 0,
-      terminalLog,
-      provenanceComposition: { human: 0, ai: 0, humanModifiedAi: 0, unknown: 100 },
-      repoContentHash: shortHash(repoContentHash, 16),
-      sbom,
-    };
-
-    const riskLevel = overallPolicy.toLowerCase() as "clear" | "review" | "blocking" | "unknown";
 
     await updateScan({
       status: "complete",
       finished_at: new Date().toISOString(),
-      risk_level: riskLevel,
-      summary_json: summary,
+      risk_level: result.riskLevel,
+      summary_json: result.summary,
     });
 
-    return json({ scanId, repositoryId: repository.id });
+    // Resolution history: detect new findings, keep accepted/dismissed decisions,
+    // reopen regressions, and resolve findings this scan re-checked and no longer sees.
+    let reconciliation: unknown = null;
+    if (historyAvailable && SUPABASE_SERVICE_ROLE_KEY) {
+      // Deleting a flagged file is a valid fix — but only a complete tree listing proves the file is gone.
+      let missingPaths: string[] = [];
+      if (snapshot.treeComplete) {
+        const { data: openTracked } = await supabase
+          .from("tracked_findings")
+          .select("file_path")
+          .eq("repository_id", repository.id)
+          .in("status", ["open", "in_review"])
+          .not("file_path", "is", null);
+        missingPaths = (openTracked ?? [])
+          .map((row: { file_path: string | null }) => row.file_path)
+          .filter((path: string | null): path is string => Boolean(path) && !snapshot.allPaths.has(path!));
+      }
+      const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data, error } = await admin.rpc("sync_tracked_findings", { p_scan_id: scanId, p_missing_paths: missingPaths });
+      if (error) {
+        terminalLog.push(`[history] resolution tracking unavailable: ${error.message}`);
+      } else {
+        reconciliation = data;
+        const r = data as { detected?: number; resolved?: number; reopened?: number } | null;
+        terminalLog.push(`[history] ${r?.detected ?? 0} new · ${r?.resolved ?? 0} resolved by this scan · ${r?.reopened ?? 0} reopened`);
+      }
+    } else {
+      terminalLog.push("[history] resolution tracking unavailable on this deployment (migration pending)");
+    }
+    await updateScan({ summary_json: { ...result.summary, terminalLog } });
+
+    return json({ scanId, repositoryId: repository.id, reconciliation });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown scan failure";
     await updateScan({

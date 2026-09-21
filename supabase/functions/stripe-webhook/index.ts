@@ -91,12 +91,18 @@ Deno.serve(async (req: Request) => {
     priceId = await fetchLineItemPriceId(object.id);
   }
 
+  // Non-secret fields only. porygen_plan separates customer subscriptions
+  // ("pro" | "team") from the APEX dogfood test ("apex_dogfood"); the app
+  // derives plan state from these verified rows and nothing else.
   const payloadSummary = {
     type: object.object ?? null,
     livemode: event.livemode ?? null,
     amount_total: object.amount_total ?? null,
     currency: object.currency ?? null,
     payment_status: object.payment_status ?? null,
+    porygen_plan: object.metadata?.porygen_plan ?? null,
+    mode: object.object === "checkout.session" ? (object.mode ?? null) : null,
+    subscription_status: object.object === "subscription" ? (object.status ?? null) : null,
   };
 
   const { error: insertError } = await admin.from("billing_events").insert({

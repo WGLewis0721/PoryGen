@@ -1,15 +1,17 @@
 # APEX dogfood
 
 PoryGen is also the first external-style SaaS used to validate APEX's connected-Stripe
-ingestion path. This document is for the operator running that acceptance test — it is
-not part of PoryGen's own product surface.
+ingestion path. This document is for the operator running that acceptance test. It is **not**
+part of PoryGen's product or pricing: the $19 SKU below never appears on customer surfaces and
+never grants a PoryGen plan. Customer pricing (Free / Pro $49 / Team $199) lives in
+`src/config/plans.ts` and [STRIPE_SETUP.md](STRIPE_SETUP.md).
 
 ## The experiment
 
 ```
 PoryGen user
   → real Stripe Customer (sandbox acct_1UHy1FCmLamiWIin)
-  → PoryGen Pro Scan Pack Checkout Session
+  → APEX dogfood scan pack Checkout Session ($19 one-time, porygen_plan=apex_dogfood)
   → checkout.session.completed (real Stripe test-mode payment)
   → APEX's existing connected-Stripe event ingress
   → APEX sees a Price it has no entitlement mapping for
@@ -20,69 +22,67 @@ PoryGen user
   → replay of the same Stripe event stays idempotent
 ```
 
-**PoryGen's Pro Price must start unmapped in APEX.** This build does not create, seed,
-or hint at that mapping — the whole point is testing APEX's `mapping_required` /
-requeue path against a genuinely new, externally-created Price.
+**The Price must start unmapped in APEX.** PoryGen doesn't create, seed, or hint at that mapping.
+
+## What changed with plan separation (2026.09)
+
+- The SKU is started from **`/billing/diagnostics` → "Start $19 one-time (sandbox) checkout"**,
+  not from `/billing` (which now sells subscriptions).
+- `create-checkout` is called with `{ "plan": "apex_dogfood" }`. Its Price comes from
+  `STRIPE_APEX_DOGFOOD_PRICE_ID`, falling back to the legacy `STRIPE_PRO_PRICE_ID` so an existing
+  setup keeps working.
+- Session metadata is `porygen_plan=apex_dogfood` (previously `pro`), so the payment can't be
+  mistaken for a Pro subscription anywhere. APEX doesn't read `porygen_plan`; the attribution
+  contract below is unchanged.
+- The cancel URL returns to `/billing/diagnostics`.
+- A completed dogfood payment shows as an APEX test purchase in diagnostics and doesn't change
+  the account's plan.
 
 ## What this build does NOT do
 
-- Does not create the APEX price mapping.
-- Does not use the Apex-Public Stripe App publisher account.
-- Does not use the APEX managed-app sandbox.
-- Does not change any APEX code or configuration.
-- Does not invent an `APEX_CUSTOMER_ID` — if it's unset, PoryGen's billing diagnostics
-  say so explicitly (see below) instead of fabricating one.
+- Create the APEX price mapping, use the Apex-Public publisher account or the managed-app
+  sandbox, or change APEX code or configuration.
+- Invent an `APEX_CUSTOMER_ID` — if unset, diagnostics say so.
 
 ## IDs the operator needs
 
-All available without querying any database directly — open `/billing/diagnostics` after
-signing in and completing (or attempting) a checkout:
+All on `/billing/diagnostics` after signing in:
 
-| Diagnostic field | Where it comes from |
+| Field | Source |
 |---|---|
-| Stripe account ID | `billing-diagnostics` Edge Function → `GET /v1/account` with the configured `STRIPE_SECRET_KEY` |
-| Stripe environment (sandbox/live) | Inferred from the `STRIPE_SECRET_KEY` prefix |
-| PoryGen Pro Price ID (`STRIPE_PRO_PRICE_ID`) | Configured Edge Function secret — this is the Price APEX needs to map |
-| APEX customer ID (configured / missing) | `APEX_CUSTOMER_ID` Edge Function secret, echoed verbatim if set |
-| PoryGen internal user ID | The signed-in Supabase `auth.users.id` |
-| Stripe Customer ID | `billing_customers.stripe_customer_id`, created on first checkout |
-| Latest Checkout Session ID / PaymentIntent ID / Stripe event ID | `billing_events`, written only by the verified webhook |
+| Stripe account ID | `billing-diagnostics` → `GET /v1/account` |
+| Stripe environment | Inferred from the secret key prefix |
+| APEX dogfood price | `STRIPE_APEX_DOGFOOD_PRICE_ID` (or legacy `STRIPE_PRO_PRICE_ID`) — the Price APEX must map |
+| APEX customer ID | `APEX_CUSTOMER_ID`, echoed if set |
+| PoryGen user ID | `auth.users.id` |
+| Stripe Customer ID | `billing_customers.stripe_customer_id` |
+| Latest Checkout Session / PaymentIntent / event IDs | `billing_events` (verified webhook only) |
 
 ## Attribution contract
 
-`create-checkout` sets `metadata.apex_customer_id` on **both** the Stripe Customer and
-the Checkout Session, read from `APEX_CUSTOMER_ID`. Per APEX's own connected-ingress
-code (`supabase/functions/_shared/connected_stripe_ingress.ts` in the APEX repo — not
-modified by this build), that metadata field is a **Stripe-carried linkage claim**: APEX
-resolves it against its own `customers` table for the connected workspace and only
-honors it if it names a customer that already exists there. It never sets *how many*
-credits are granted (that's resolved server-side from APEX's own price mappings) — it
-only identifies *whose* ledger the eventual grant belongs to.
+For the dogfood SKU, `create-checkout` sets `metadata.apex_customer_id` on the Checkout Session
+and — when the Customer is first created — on the Stripe Customer, from `APEX_CUSTOMER_ID`. Per
+APEX's connected-ingress code (`supabase/functions/_shared/connected_stripe_ingress.ts` in the
+APEX repo, not modified here), that field is a Stripe-carried linkage claim that APEX honors only
+if it names an existing APEX customer for the connected workspace. It never sets how many credits
+are granted. Subscription checkouts (`pro` / `team`) don't carry `apex_customer_id` on the session.
 
-**`APEX_CUSTOMER_ID` must therefore be a real, existing APEX customer ID for the
-workspace connected to `acct_1UHy1FCmLamiWIin`** — not a PoryGen-internal ID, and not
-invented by this build.
+`APEX_CUSTOMER_ID` must be a real, existing APEX customer ID for the workspace connected to
+`acct_1UHy1FCmLamiWIin`.
 
-## Status in this build
+## Status
 
-`APEX_CUSTOMER_ID` and `STRIPE_SECRET_KEY` were not available in this environment, so the
-live Checkout → webhook → APEX-ingress chain was not exercised end-to-end. The Stripe
-integration code (Customer creation, Checkout Session creation, signed webhook
-ingestion) is real and deployed — see [STRIPE_SETUP.md](STRIPE_SETUP.md).
+`STRIPE_SECRET_KEY` and `APEX_CUSTOMER_ID` were not available in this environment, so the live
+chain hasn't been exercised end to end. The code path is real.
 
 ## Next action
 
-To produce the actual unmapped-Price payment APEX should ingest:
-
-1. Provide sandbox credentials for `acct_1UHy1FCmLamiWIin`: `supabase secrets set
-   STRIPE_SECRET_KEY=... STRIPE_WEBHOOK_SECRET=... STRIPE_PRO_PRICE_ID=...`.
-2. Provide the real APEX customer ID for that connected workspace: `supabase secrets set
-   APEX_CUSTOMER_ID=...`.
-3. Point a Stripe webhook endpoint at PoryGen's `stripe-webhook` function (see
-   [STRIPE_SETUP.md](STRIPE_SETUP.md)) **and** confirm APEX's own connected-Stripe
-   ingress is subscribed to the same sandbox account's events.
-4. Sign in to PoryGen, go to `/billing`, click **Upgrade to Pro**, complete the sandbox
-   Checkout.
-5. Confirm in `/billing/diagnostics` that a `checkout.session.completed` event landed,
-   then check APEX's own ingress state for that event (expected: `mapping_required` on
-   first delivery, since the Price is intentionally unmapped).
+1. `supabase secrets set STRIPE_SECRET_KEY=... STRIPE_WEBHOOK_SECRET=... STRIPE_APEX_DOGFOOD_PRICE_ID=...`
+   (or keep `STRIPE_PRO_PRICE_ID`).
+2. `supabase secrets set APEX_CUSTOMER_ID=...` (the real APEX customer for that workspace).
+3. Point a Stripe webhook at PoryGen's `stripe-webhook` and confirm APEX's ingress is subscribed
+   to the same sandbox account.
+4. Redeploy `create-checkout`, `stripe-webhook`, `billing-diagnostics`.
+5. Sign in → `/billing/diagnostics` → start the $19 checkout → complete it in Stripe test mode.
+6. Confirm the `checkout.session.completed` event in diagnostics, then check APEX's ingress state
+   (expected on first delivery: `mapping_required`).

@@ -1,34 +1,40 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_LINE } from "../config/site";
 
 export function Footer() {
   return (
-    <footer className="pg-footer">
-      <div className="pg-shell pg-footer-inner">
-        <div className="pg-footer-col">
-          <div className="pg-footer-brand">PoryGen</div>
-          <p className="pg-footer-tagline">The paper trail for AI-generated code.</p>
+    <footer className="site-footer">
+      <div className="shell site-footer-grid">
+        <div className="site-footer-brand">
+          <Link to="/" className="wordmark" aria-label="PoryGen home">
+            PoryGen
+          </Link>
+          <p className="site-footer-line">{PRODUCT_LINE}</p>
         </div>
-        <div className="pg-footer-col">
-          <span className="pg-label">Product</span>
-          <Link to="/product">product</Link>
-          <Link to="/pricing">pricing</Link>
-          <Link to="/enterprise">enterprise</Link>
-          <Link to="/lattice">sample audit</Link>
-        </div>
-        <div className="pg-footer-col">
-          <span className="pg-label">Docs</span>
-          <Link to="/docs">documentation</Link>
-          <Link to="/docs/security">security</Link>
-        </div>
-        <div className="pg-footer-col">
-          <span className="pg-label">Legal</span>
-          <span className="pg-footer-note">
-            Evidence, not certification — see <Link to="/docs#claim-boundaries">claim boundaries</Link>.
-          </span>
-        </div>
+        <nav className="site-footer-col" aria-label="Product">
+          <span className="label-caps">Product</span>
+          <Link to="/how-it-works">How it works</Link>
+          <Link to="/demo">Live demo</Link>
+          <Link to="/pricing">Pricing</Link>
+        </nav>
+        <nav className="site-footer-col" aria-label="Trust">
+          <span className="label-caps">Trust</span>
+          <Link to="/security">Security and data</Link>
+          <Link to="/security#claims">What PoryGen doesn’t claim</Link>
+          <Link to="/docs">Documentation</Link>
+        </nav>
+        <nav className="site-footer-col" aria-label="Account">
+          <span className="label-caps">Account</span>
+          <Link to="/sign-in">Sign in</Link>
+          <Link to="/sign-up">Create an account</Link>
+        </nav>
       </div>
-      <div className="pg-shell">
-        <p className="pg-footer-copyright">PoryGen — provenance evidence, not legal certification.</p>
+      <div className="shell site-footer-base">
+        <p>
+          Similarity findings are evidence for review, not proof of copying and not legal advice. Coverage is limited to
+          the reference sources PoryGen compares against — see <Link to="/security#claims">what PoryGen doesn’t claim</Link>.
+        </p>
+        <p>© 2026 PoryGen · Landscape imagery generated for PoryGen.</p>
       </div>
     </footer>
   );

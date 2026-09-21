@@ -7,6 +7,8 @@ import {
   evaluateDependencyLicenses,
   summarizePolicy,
   staticLicenseLookup,
+  normalizeSpdx,
+  createRegistryLicenseLookup,
 } from "../src/scanner/license.js";
 
 describe("license file detection", () => {
@@ -93,5 +95,57 @@ describe("evaluateDependencyLicenses", () => {
     expect(react?.policy).toBe("CLEAR");
     expect(gpl?.license).toBe("AGPL-3.0");
     expect(gpl?.policy).toBe("BLOCKING");
+  });
+});
+
+describe("normalizeSpdx", () => {
+  it("maps plain identifiers and common long-form names", () => {
+    expect(normalizeSpdx("MIT")).toBe("MIT");
+    expect(normalizeSpdx("Apache License, Version 2.0")).toBe("Apache-2.0");
+    expect(normalizeSpdx("The Unlicense")).toBe("Unlicense");
+  });
+
+  it("strips -only / -or-later / + suffixes", () => {
+    expect(normalizeSpdx("GPL-3.0-or-later")).toBe("GPL-3.0");
+    expect(normalizeSpdx("AGPL-3.0-only")).toBe("AGPL-3.0");
+    expect(normalizeSpdx("GPL-2.0+")).toBe("GPL-2.0");
+  });
+
+  it("resolves OR expressions to the most permissive known choice", () => {
+    expect(normalizeSpdx("(MIT OR Apache-2.0)")).toBe("MIT");
+    expect(normalizeSpdx("GPL-3.0 OR MPL-2.0")).toBe("MPL-2.0");
+  });
+
+  it("resolves AND expressions to the most restrictive term, or Unknown if any part is unknown", () => {
+    expect(normalizeSpdx("MIT AND GPL-3.0")).toBe("GPL-3.0");
+    expect(normalizeSpdx("MIT AND Custom-Thing")).toBe("Unknown");
+  });
+
+  it("returns Unknown for empty, non-string, or unrecognised input", () => {
+    expect(normalizeSpdx("")).toBe("Unknown");
+    expect(normalizeSpdx(undefined)).toBe("Unknown");
+    expect(normalizeSpdx({ type: "MIT" })).toBe("Unknown");
+    expect(normalizeSpdx("BSD")).toBe("Unknown");
+  });
+});
+
+describe("createRegistryLicenseLookup", () => {
+  const respond = (body: unknown) => (async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch;
+
+  it("reads npm license objects and SPDX expressions", async () => {
+    expect(await createRegistryLicenseLookup(respond({ license: { type: "ISC" } }))({ name: "x", ecosystem: "npm" })).toBe("ISC");
+    expect(await createRegistryLicenseLookup(respond({ license: "(MIT OR Apache-2.0)" }))({ name: "x", ecosystem: "npm" })).toBe("MIT");
+  });
+
+  it("falls back to PyPI trove classifiers", async () => {
+    const lookup = createRegistryLicenseLookup(
+      respond({ info: { license: "", classifiers: ["Programming Language :: Python", "License :: OSI Approved :: MIT License"] } }),
+    );
+    expect(await lookup({ name: "requests-thing", ecosystem: "pypi" })).toBe("MIT");
+  });
+
+  it("returns Unknown when the registry fails", async () => {
+    const failing = (async () => new Response("nope", { status: 500 })) as unknown as typeof fetch;
+    expect(await createRegistryLicenseLookup(failing)({ name: "x", ecosystem: "npm" })).toBe("Unknown");
   });
 });

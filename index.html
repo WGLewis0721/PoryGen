@@ -2,20 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0d10" />
+    <title>PoryGen — Move fast. Keep it yours.</title>
     <meta
       name="description"
-      content="PoryGen records how software was created, identifies risky code ancestry, and turns AI-assisted development into an auditable evidence trail."
+      content="PoryGen checks the code AI agents put into your product for suspicious source similarity and license risk before it ships."
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap"
-      rel="stylesheet"
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" href="/fonts/newsreader-opsz-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PoryGen" />
+    <meta property="og:title" content="PoryGen — Move fast. Keep it yours." />
+    <meta
+      property="og:description"
+      content="Checks the code AI agents put into your product for suspicious source similarity and license risk before it ships."
     />
-    <title>PoryGen — Own your code. Prove your provenance.</title>
+    <meta property="og:image" content="/images/og-image.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // The homepage hero is the LCP element; start its download alongside the JS bundle.
+      if (location.pathname === "/") {
+        var l = document.createElement("link");
+        l.rel = "preload";
+        l.as = "image";
+        l.type = "image/avif";
+        l.fetchPriority = "high";
+        if (matchMedia("(max-width: 900px)").matches) {
+          l.imageSrcset = "/images/hero-ridge-portrait-720.avif 720w, /images/hero-ridge-portrait-900.avif 900w";
+        } else {
+          l.imageSrcset = "/images/hero-ridge-960.avif 960w, /images/hero-ridge-1600.avif 1600w, /images/hero-ridge-2560.avif 2560w";
+        }
+        l.imageSizes = "100vw";
+        document.head.appendChild(l);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

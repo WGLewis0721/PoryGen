@@ -1,12 +1,14 @@
 // billing-diagnostics: returns non-secret Stripe/APEX configuration state for
-// the developer diagnostics panel. Never returns STRIPE_SECRET_KEY,
+// the operator diagnostics panel. Never returns STRIPE_SECRET_KEY,
 // STRIPE_WEBHOOK_SECRET, or the Supabase service-role key — only whether
-// they're configured, plus identifiers that are safe to display (a price ID,
-// a Stripe account ID).
+// they're configured, plus identifiers that are safe to display (Price IDs, a
+// Stripe account ID).
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-const STRIPE_PRO_PRICE_ID = Deno.env.get("STRIPE_PRO_PRICE_ID");
+const STRIPE_PRICE_PRO_MONTHLY = Deno.env.get("STRIPE_PRICE_PRO_MONTHLY");
+const STRIPE_PRICE_TEAM_MONTHLY = Deno.env.get("STRIPE_PRICE_TEAM_MONTHLY");
+const APEX_DOGFOOD_PRICE_ID = Deno.env.get("STRIPE_APEX_DOGFOOD_PRICE_ID") ?? Deno.env.get("STRIPE_PRO_PRICE_ID");
 const APEX_CUSTOMER_ID = Deno.env.get("APEX_CUSTOMER_ID");
 
 const CORS_HEADERS = {
@@ -37,7 +39,7 @@ Deno.serve(async (req: Request) => {
         stripeAccountId = data.id ?? null;
       }
     } catch {
-      // diagnostics endpoint tolerates Stripe being unreachable
+      // diagnostics tolerate Stripe being unreachable
     }
   }
 
@@ -45,9 +47,15 @@ Deno.serve(async (req: Request) => {
     stripeConfigured: Boolean(STRIPE_SECRET_KEY),
     stripeEnvironment,
     stripeAccountId,
-    stripeProPriceId: STRIPE_PRO_PRICE_ID ?? null,
+    // Legacy field kept for older clients: this was always the APEX dogfood price.
+    stripeProPriceId: APEX_DOGFOOD_PRICE_ID ?? null,
     webhookSecretConfigured: Boolean(STRIPE_WEBHOOK_SECRET),
     apexCustomerIdConfigured: Boolean(APEX_CUSTOMER_ID),
     apexCustomerId: APEX_CUSTOMER_ID ?? null,
+    prices: {
+      proMonthly: STRIPE_PRICE_PRO_MONTHLY ?? null,
+      teamMonthly: STRIPE_PRICE_TEAM_MONTHLY ?? null,
+      apexDogfood: APEX_DOGFOOD_PRICE_ID ?? null,
+    },
   });
 });

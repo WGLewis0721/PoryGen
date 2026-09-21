@@ -1,0 +1,45 @@
+/*
+  Type sources (all SIL Open Font License 1.1):
+  - Newsreader (Production Type) — display serif. Self-hosted subset: Latin, optical size
+    pinned to the 56pt display cut, weight 340–560. Regenerate with the recipe in DESIGN.md.
+  - Caveat (Impallari Type) — handwritten notes only. Self-hosted subset: lowercase, digits,
+    basic punctuation, weight 500.
+  - Public Sans (USWDS) and JetBrains Mono — via Fontsource, Latin unicode-range split.
+  Fallback faces carry metric overrides so the swap doesn't shift layout.
+*/
+@import "@fontsource-variable/public-sans/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
+@font-face {
+  font-family: "Newsreader Display";
+  src: url("/fonts/newsreader-opsz-latin.woff2") format("woff2");
+  font-weight: 340 560;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Caveat Notes";
+  src: url("../assets/fonts/caveat-notes-latin.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Newsreader Fallback";
+  src: local("Georgia");
+  size-adjust: 98.9%;
+  ascent-override: 74.3%;
+  descent-override: 26.8%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Public Sans Fallback";
+  src: local("Arial");
+  size-adjust: 105.2%;
+  ascent-override: 90.3%;
+  descent-override: 21.4%;
+  line-gap-override: 0%;
+}

@@ -1,51 +1,55 @@
 # Progress
 
-## Done
+## 2026.09 course correction — done (on branch, not deployed)
 
-- Vite/React/TS app scaffolded, npm workspaces (`packages/provenance-core`,
-  `packages/vscode-extension`).
-- Design system: Hardware Brutalism × Cybernetic Familiar tokens, Bit-Critter SVG (6
-  states, CSS-only autonomic motion, reduced-motion safe), marketing site (landing,
-  product, pricing spec plate, enterprise schematic, docs index).
-- Supabase project provisioned (`fxeuahfgwydwzflymsoy`), full schema + RLS applied,
-  security-advisor-clean.
-- Auth: real Supabase sign-up/in/out, session persistence, live-tested in browser.
-- `scan-repository` Edge Function: real GitHub ingestion (SSRF-safe), lexical
-  normalization, real Winnowing fingerprints, real npm/PyPI license lookups, CycloneDX
-  SBOM — live-tested against `octocat/Hello-World` and `expressjs/cors` through the
-  actual UI, not just curl.
-- `create-checkout` / `stripe-webhook` / `billing-diagnostics` Edge Functions deployed;
-  Stripe code real but untested end-to-end (no sandbox key in this environment) —
-  `create-checkout` verified to fail closed with a clear `STRIPE_NOT_CONFIGURED` message.
-- Dashboard, repositories, new-scan, scan-progress/results, finding-detail, provenance
-  ledger, evidence bundle (JSON export + print report + Verified:Clear badge), billing
-  status/diagnostics/success, settings — all wired to live Supabase data.
-- Lattice demo project seeded deterministically (26 provenance events, 4 findings,
-  1 genuinely-computed structural-fingerprint match). Seeding surfaced and fixed two real
-  bugs in the hash-chain library (optional-field presence, Postgres timestamp format
-  drift) — both covered by new regression tests.
-- VS Code extension: compiles, real `onDidChangeTextDocument` capture, classifier tests
-  pass via the root vitest suite.
-- `packages/provenance-core`: 53/53 tests passing, including genuine tree-sitter parsing
-  (`web-tree-sitter` + `tree-sitter-wasms`) as the reference normalizer.
-- Full docs set (README, ARCHITECTURE, DATA_MODEL, SCANNER, PROVENANCE, STRIPE_SETUP,
-  APEX_DOGFOOD, SECURITY, DEMO_FLOW, OPUS_HANDOFF).
-- `npm run build` and `npm test` both clean.
+- Product repositioned: continuous source-risk protection for AI-assisted development.
+  Provenance, AI-composition percentages, and M&A framing moved out of the pitch; editor
+  attribution kept as optional history.
+- New design system and marketing site (`/`, `/how-it-works`, `/pricing`, `/security`, `/docs`);
+  generated editorial imagery with documented provenance; self-hosted, subset fonts with
+  metric-matched fallbacks.
+- Public `/demo`: fictional repo, real pipeline in the browser, full scan → inspect → fix →
+  rescan → resolved loop, alternate decisions with required reasons.
+- Scanner: `SimilarityProvider` seam, static-corpus provider, portable `runScanPipeline`, line-
+  range evidence, bounded excerpts, bands, per-finding coverage, SPDX expression handling,
+  tree-sitter path through the same seam.
+- Resolution history: migration `20260921000500` (tracked findings, append-only resolutions,
+  owner-checked user actions, service-role scan reconciliation with an explicit re-check
+  contract).
+- App: dashboard ("Your codebase today"), findings queue, question-led finding page with actions,
+  history, evidence export with history and coverage.
+- Billing: centralized plans (Free / Pro $49 / Team $199 / Diligence Pack / Enterprise);
+  subscriptions fail closed without Price IDs; APEX $19 SKU separated and operator-only; plan
+  derived from verified webhooks.
+- Lattice seed regenerated through the real pipeline, with all three resolution outcomes.
+- Tests: scanner/pipeline/providers, SPDX, PGlite database tests (RLS, functions, append-only,
+  seed), plan config, plan derivation, resolution model, vocabulary, evidence mapping, demo
+  walkthrough, homepage/pricing content guards.
 
-## Known blockers (external credentials, not code)
+## Earlier (still true)
 
-- Stripe sandbox credentials (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-  `STRIPE_PRO_PRICE_ID`) and `APEX_CUSTOMER_ID` were not available in this environment —
-  code path is real and deployed, just not exercised against a live payment. See
-  docs/APEX_DOGFOOD.md for the exact next action.
-- GitHub API calls run unauthenticated (no `GITHUB_TOKEN`) — works fine for the repos
-  tested, but subject to GitHub's unauthenticated rate limit under heavier use.
+- Supabase Auth, RLS on every table, security-advisor-clean (before this migration).
+- Real GitHub ingestion with an SSRF-safe boundary; npm/PyPI license lookups; CycloneDX SBOM.
+- Stripe webhook verification and idempotency; `create-checkout` fails closed without keys.
+- VS Code extension: compiles, classifier tested.
 
-## Deliberately out of scope
+## Blockers (credentials, not code)
 
-- Enterprise-tier infrastructure (large reference corpus, semantic clone detection,
-  DOM/UI similarity, private deployment) — architecture documented, not built, always
-  labeled "Enterprise preview."
-- Sigstore signing — adapter ready, no real OIDC credential in this environment.
-- VS Code extension Marketplace packaging (`vsce package`) — extension builds and runs in
-  an Extension Development Host, which is what the spec asked for.
+- Stripe sandbox keys and subscription Price IDs; `APEX_CUSTOMER_ID`.
+- `GITHUB_TOKEN` (unauthenticated GitHub API is rate-limited).
+- A sales contact address (`VITE_SALES_EMAIL`).
+
+## Deploy checklist for this branch
+
+1. `supabase db push` (resolution-history migration).
+2. `supabase functions deploy scan-repository create-checkout stripe-webhook billing-diagnostics`.
+3. Optional: apply `scripts/lattice-seed.sql` with service-role access.
+4. `npm run build && node scripts/deploy-worker-assets.mjs`.
+5. Run the Supabase security advisor again (two new `security definer` functions — both set
+   `search_path = ''` and have narrowed grants).
+
+## Out of scope (documented, not built)
+
+Continuous PR/push monitoring, private repositories, GitHub checks, team features, plan
+enforcement, additional similarity providers, async worker, Sigstore signing, Marketplace
+packaging of the VS Code extension.

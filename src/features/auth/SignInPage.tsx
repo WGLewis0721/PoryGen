@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BitCritter } from "../../components/BitCritter";
 import { useAuth } from "./AuthContext";
-import "./auth.css";
+import { AuthArt } from "./AuthArt";
+import { useDocumentTitle } from "../../components/useDocumentTitle";
 
 export function SignInPage() {
+  useDocumentTitle("Sign in — PoryGen");
   const { signIn, configured } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,54 +29,56 @@ export function SignInPage() {
   }
 
   return (
-    <div className="pg-shell pg-auth-wrap">
-      <div className="pg-auth-card">
-        <div className="pg-auth-head">
-          <BitCritter state="idle" size={48} />
-          <h1 style={{ fontSize: "1.2rem" }}>Sign in</h1>
+    <div className="auth">
+      <AuthArt />
+      <div className="auth-panel">
+        <div className="auth-card">
+          <h1>Sign in</h1>
+          <p>Pick up where your last scan left off.</p>
+
+          {!configured && (
+            <p className="notice notice-warn">
+              Sign-in isn't available in this environment: Supabase isn't configured (VITE_SUPABASE_URL /
+              VITE_SUPABASE_PUBLISHABLE_KEY). The <Link to="/demo">live demo</Link> works without an account.
+            </p>
+          )}
+
+          <form className="auth-form" onSubmit={onSubmit}>
+            <div className="field">
+              <label className="label" htmlFor="email">
+                Email
+              </label>
+              <input id="email" name="email" type="email" className="input" required autoComplete="email" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="password">
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                className="input"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            {error && (
+              <p className="notice notice-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting || !configured}>
+              {submitting ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+
+          <p className="auth-switch">
+            New to PoryGen? <Link to="/sign-up">Create an account</Link>
+          </p>
         </div>
-
-        {!configured && (
-          <div className="pg-form-error" style={{ marginBottom: 16 }}>
-            Supabase is not configured in this environment — authentication is unavailable until
-            VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY are set.
-          </div>
-        )}
-
-        <form className="pg-auth-form" onSubmit={onSubmit}>
-          <div className="pg-field">
-            <label className="pg-label" htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              className="pg-input"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="pg-field">
-            <label className="pg-label" htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              className="pg-input"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          {error && <div className="pg-form-error" role="alert">{error}</div>}
-          <button type="submit" className="pg-btn pg-btn-primary pg-btn-block" disabled={submitting || !configured}>
-            {submitting ? "signing in…" : "sign in"}
-          </button>
-        </form>
-
-        <p className="pg-auth-switch">
-          No account yet? <Link to="/sign-up">Feed a repository</Link>
-        </p>
       </div>
     </div>
   );

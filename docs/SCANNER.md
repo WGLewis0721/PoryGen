@@ -1,89 +1,128 @@
 # Scanner
 
+The scanner is an engine inside the product, not the product. Everything here can be improved
+or replaced — normalizer, fingerprinting parameters, providers, corpora — without changing what
+a customer does with a finding.
+
 ## Pipeline
 
+`packages/provenance-core/src/scanner/pipeline.ts` — `runScanPipeline(input)`:
+
 ```
-ingest → index → normalize (AST or lexical) → fingerprint (winnow) → license scan → provenance summary
+index        code files vs. manifests / license files / docs
+normalize    lexical (default) or tree-sitter tokens per code file
+fingerprint  Winnowing over normalized tokens
+compare      discover → compare through each SimilarityProvider, band each match
+licenses     license files + dependency manifests, registry lookups, SPDX policy
+findings     drafts with finding_key, band, severity, evidence, excerpts, remediation
+summary      coverage, providersRun, checkedPaths, ingestedPaths, manifestsChecked,
+             evaluatedFindingTypes, findingsTruncated, per-file similarity counts, SBOM
 ```
 
-Every phase writes `scans.status` as it happens, so the client's poll loop shows genuine
-progress rather than a canned animation.
+It is runtime-agnostic (browser, Node, Deno). `onPhase` callbacks let the caller persist
+progress; `scan-repository` writes each phase to `scans.status`. Ingestion and persistence stay
+with the caller.
 
-## Tree-sitter support (reference implementation)
+Callers today: the `scan-repository` Edge Function (vendored copy under `_shared/`, regenerated
+by `scripts/sync-vendored-copies.mjs`), the public `/demo` (in the browser), the Lattice seed
+generator, and the test suite (including a tree-sitter run).
 
-`packages/provenance-core/src/scanner/treeSitterNormalize.ts` uses real `web-tree-sitter`
-+ the `tree-sitter-wasms` grammar bundle for **JavaScript, TypeScript, and Python**. It
-walks the real syntax tree: each named node becomes a `node:<type>` token
-(`node:function_declaration`, `node:if_statement`, ...), identifier leaves collapse to
-`ID`, literal leaves collapse to `LIT`. This is genuinely AST-shape-based — proven by
-`packages/provenance-core/test/treeSitterNormalize.test.ts`, which parses real source,
-renames every identifier and reformats the whitespace, and asserts the resulting
-fingerprint set is unchanged.
+## Normalization
 
-This path is Node-only (it reads `.wasm` grammar files from disk via `node:fs`), so it
-runs in the test suite and in `scripts/seed-lattice.ts` for fixture generation — not in
-the Deno Edge Function.
+- **Lexical** (`lexicalNormalize.ts`) — dependency-free tokenizer. Comments and literal values
+  vanish, non-keyword identifiers collapse to `ID`, keywords and punctuation survive. Renaming
+  or reformatting doesn't change the token stream. Runs everywhere, including the Edge Function.
+- **Tree-sitter** (`treeSitterNormalize.ts`) — real `web-tree-sitter` grammars for JavaScript,
+  TypeScript, and Python; named syntax nodes become tokens. Node-only (reads WASM grammars from
+  disk). This is the preferred path for a worker, CI, or local run — `pipeline.test.ts` runs the
+  full pipeline and the reference provider on it.
 
-## Lexical normalizer (deployed path)
+Providers fingerprint their candidates with the same normalizer as the probe, so the two paths
+never compare unlike token streams.
 
-`packages/provenance-core/src/scanner/lexicalNormalize.ts` is what actually runs inside
-`scan-repository`. It's a dependency-free regex tokenizer: comments and exact
-string/number values vanish, non-keyword identifiers collapse to `ID`, and
-keywords/punctuation survive verbatim because they carry the structural shape. Renaming a
-variable or reformatting a file does not change its normalized token stream — proven by
-`lexicalNormalize.test.ts`.
-
-**Why this instead of tree-sitter in production**: `web-tree-sitter` needs its own WASM
-runtime plus a per-language grammar file (500 KB–2.3 MB each). Bundling those into a
-Deno Edge Function deploy payload, or fetching them from a CDN on every cold start, is a
-real cost/reliability tradeoff this build didn't take on. The lexical normalizer is
-honest about being simpler than full parsing, but it feeds the *same* winnowing/
-fingerprinting/corpus-matching pipeline as the tree-sitter path — the novel part of the
-technique is identical in both; only the tokenization front-end differs. Swapping in a
-WASM-served tree-sitter path later is a contained change (`scan-repository/index.ts`'s
-`normalize` call), not an architecture change.
+**Why lexical on the edge:** bundling tree-sitter's WASM runtime and grammars (0.5–2.3 MB each)
+into a cold-start-sensitive Deno function wasn't worth it for a 40-file scan. The swap is
+contained: pass a different `normalizer` to `runScanPipeline`.
 
 ## Winnowing
 
-`packages/provenance-core/src/scanner/winnow.ts` implements Schleimer, Wilkerson &
-Aiken's Winnowing algorithm (2003) directly: `k`-gram hashing (`k = 5` normalized
-tokens, FNV-1a) followed by a sliding window (`w = 4`) that keeps the minimum hash per
-window (rightmost on ties), guaranteeing every substring of length ≥ `k + w - 1` has at
-least one fingerprint selected. `hashKGrams` / `winnow` are exported and unit-tested
-independently of the tokenizer.
+`winnow.ts` implements Schleimer, Wilkerson & Aiken (2003): FNV-1a hashes of `k = 5` token
+k-grams, then the minimum hash in each window of `w = 4` (rightmost on ties). Any shared run of
+`k + w − 1 = 8` tokens is guaranteed to produce a shared fingerprint.
 
-## Reference corpus
+`similarity.ts` maps shared fingerprints back to **line ranges on both sides** (each
+fingerprint's k-gram spans known token lines), merges adjacent ranges, and computes
+**containment** = shared ÷ candidate fingerprints.
 
-`packages/provenance-core/src/scanner/corpus.ts` bundles four small, original utility
-implementations (`debounce`, `deepClone`, `quicksort`, `withRetry`) written for this
-corpus — not copied from any specific real project — each tagged with a license so
-matches carry a plausible license signal. **The scanner compares only against this
-configured corpus.** Product copy says exactly that
-("Structural fingerprint match against configured reference corpus") and never implies a
-search of public repositories or the open internet. Containment threshold: 0.55
-(`CORPUS_MATCH_THRESHOLD`).
+## Bands and thresholds
+
+| Band | Rule | Persisted severity |
+|---|---|---|
+| Clear | containment < 55% | not a finding |
+| Common pattern | ≥ 55%, candidate is a known idiom **and** permissively licensed | `info` (never tracked) |
+| Review suggested | 55% – 85% | `review` |
+| Strong source match | ≥ 85% | `review`, or `blocking` when the source's license is strong copyleft |
+
+Each similarity finding stores `evidence_json`: `band`, `why` (a plain sentence), `provider`
+(id, name, corpus, version, scope, coverage claim), `candidate` (title, license, policy,
+origin), `containment`, fingerprint counts, `probeLines` / `candidateLines`, `probeExcerpt`
+(at most 40 lines / 4,000 characters of the matched region of the scanned file),
+`candidateExcerpt` (only when the provider may redistribute it), and `normalizer`. Legacy keys
+(`corpusEntryId`, `corpusEntryLicense`, `note`) are kept for older readers.
+
+The product never says "copied" or "stolen"; the words are *strong source match*, *possible
+source match*, and *review suggested*.
+
+## Providers and coverage
+
+See [ARCHITECTURE.md](ARCHITECTURE.md#similarity-providers) for the interface.
+
+| Provider | Scope | Status |
+|---|---|---|
+| `porygen-reference-corpus` | 4 original reference implementations (debounce, deepClone, quicksort, withRetry), each with an assigned reference license, v2026.1 | **Live — the only provider in real scans** |
+| `sample-corpus` | 3 fictional "public" files for `/demo` | Demo only |
+| Licensed source corpora | Large licensed bodies of public source | Planned |
+| Commercial source intelligence | SCANOSS-class services | Planned |
+| GitHub candidate discovery | Candidate search over public repositories, then precise comparison | Planned |
+| Private corpus | A company's or client's own code | Planned |
+
+**What this means honestly:** the matching engine is real and tested; the coverage is a small
+demonstration corpus. A clear result today means "nothing matched PoryGen's reference corpus",
+not "this code is original". Marketing copy says "checks against known reference source" and
+explicitly never claims an internet-wide search. The reference entries are original code written
+for PoryGen, so a match means "structurally similar to this reference", not "resembles a
+specific third-party project". Broader production coverage needs, at minimum: a licensed corpus
+or source-intelligence provider, an index that isn't loaded into memory per request, and the
+async worker described in [ARCHITECTURE.md](ARCHITECTURE.md#evolving-the-scanner).
+
+## Resolution contract
+
+`sync_tracked_findings` (see [DATA_MODEL.md](DATA_MODEL.md)) resolves a tracked finding only when
+the new scan **provably re-checked it**:
+
+- similarity finding — its file is in `summary.checkedPaths` **and** its provider is in
+  `summary.providersRun` (a provider swap never resolves old findings);
+- dependency license finding — dependency manifests were evaluated (`manifestsChecked`);
+- license-file finding — the file is in `ingestedPaths`;
+- any file finding — or the scanner reports the file is gone from a *complete* repository tree;
+- never from a scan with `findingsTruncated: true`, and never for types the scan didn't evaluate.
+
+This is why the pipeline records those summary fields, and why actionable findings are never
+capped below 200 per scan.
 
 ## License scanner
 
-Inspects `LICENSE`, `LICENSE.md`, `LICENSE.txt`, `COPYING`, `NOTICE` by text signature,
-and parses dependencies from `package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`
-(lockfiles are in the recognized-file list; only manifests are actually parsed for
-dependency names in this build — lockfile-only projects fall back to `Unknown` for
-unlisted transitive deps). Recognizes MIT, Apache-2.0, BSD-2/3-Clause, ISC, MPL-2.0,
-LGPL-2.1/3.0, GPL-2.0/3.0, AGPL-3.0, Unlicense, Unknown. Policy mapping
-(`policyForLicense`): permissive → `CLEAR`, weak copyleft → `REVIEW`, strong copyleft →
-`BLOCKING`, unrecognized → `UNKNOWN`.
+`license.ts` detects license files by text signature and parses `package.json`,
+`requirements.txt`, `go.mod`, and `Cargo.toml`. Registry lookups (npm, PyPI) resolve SPDX
+expressions — `(MIT OR Apache-2.0)` takes the most permissive known option, `AND` takes the most
+restrictive, `-only` / `-or-later` suffixes are stripped — plus npm license objects and PyPI
+trove classifiers. Policy: permissive → CLEAR, weak copyleft → REVIEW, strong copyleft →
+BLOCKING, unrecognised → UNKNOWN (surfaced as "License unknown", review suggested).
 
-In the Edge Function, dependency licenses are resolved via **real** registry lookups
-(`registry.npmjs.org`, `pypi.org`) — fixed hosts, 3s timeout, license field only, falling
-back to `Unknown` on any failure so a flaky registry never fails the scan.
+## Limits
 
-## Limitations
-
-- Lockfile parsing (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`) is recognized as a
-  present file but not parsed for a full transitive dependency tree in this build —
-  direct dependencies from the manifest are what get evaluated.
-- The reference corpus is intentionally tiny (4 entries). It demonstrates the mechanism,
-  not production-scale clone detection — see the Enterprise-preview roadmap in
-  [ARCHITECTURE.md](ARCHITECTURE.md).
-- No binary/compiled-language support (only text source in the languages listed above).
+- 40 files, 200 KB per file, 2 MB per scan on the edge; vendor/build directories skipped.
+- Public GitHub repositories only (private needs the planned GitHub App).
+- Lockfiles are recognised but not parsed for the transitive tree; direct dependencies only.
+- Text source only; no binaries.
+- Unknown-language files are tokenized without keyword awareness (weaker signal).

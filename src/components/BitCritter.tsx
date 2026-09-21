@@ -80,7 +80,7 @@ export function BitCritter({ state = "idle", size = 200, className, label }: Bit
 
         {/* antenna */}
         <line x1="100" y1="45" x2="100" y2="24" stroke="#3a4150" strokeWidth="2" />
-        <polygon points="100,17 107,24 100,31 93,24" fill="var(--pg-structure-dim)" />
+        <polygon points="100,17 107,24 100,31 93,24" fill="var(--mist-400)" />
 
         {/* sensor housing + lens */}
         <polygon points="82,63 118,63 122,76 78,76" fill="#0d0f12" stroke="#3a4150" strokeWidth="1" />
@@ -96,12 +96,12 @@ export function BitCritter({ state = "idle", size = 200, className, label }: Bit
         />
       </g>
 
-      {/* vital indicator: the one chartreuse "heartbeat" element */}
+      {/* vital indicator: the one colored "heartbeat" element */}
       <circle className="pg-critter-vital" cx="100" cy="106" r="6" />
 
       {/* ingestion scanline, clipped to the chassis silhouette */}
       <g clipPath="url(#pg-critter-clip)">
-        <rect className="pg-critter-scanline" x="40" y="45" width="120" height="16" fill="var(--pg-accent)" opacity="0.28" />
+        <rect className="pg-critter-scanline" x="40" y="45" width="120" height="16" fill="var(--sunrise-500)" opacity="0.28" />
       </g>
     </svg>
   );

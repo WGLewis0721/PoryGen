@@ -1,32 +1,105 @@
-import { Link, NavLink } from "react-router-dom";
-import { BitCritter } from "./BitCritter";
+import { useEffect, useId, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
+import { Menu, X } from "lucide-react";
 import { useAuth } from "../features/auth/AuthContext";
+import { Wordmark } from "./Wordmark";
 
-export function MarketingNav() {
+const LINKS = [
+  { to: "/how-it-works", label: "How it works" },
+  { to: "/demo", label: "Live demo" },
+  { to: "/pricing", label: "Pricing" },
+  { to: "/security", label: "Security" },
+];
+
+export function MarketingNav({ overlay = false }: { overlay?: boolean }) {
   const { user } = useAuth();
+  const location = useLocation();
+  // The menu belongs to the page it was opened on, so navigating closes it.
+  const [openOn, setOpenOn] = useState<string | null>(null);
+  const open = openOn === location.pathname;
+  const [scrolled, setScrolled] = useState(false);
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!overlay) return;
+    let frame = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setScrolled(window.scrollY > 24));
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [overlay]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenOn(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const solid = !overlay || scrolled || open;
+
   return (
-    <header className="pg-nav">
-      <div className="pg-shell pg-nav-inner">
-        <Link to="/" className="pg-nav-brand" aria-label="PoryGen home">
-          <BitCritter state="healthy" size={30} label="" />
-          <span>PoryGen</span>
-        </Link>
-        <nav className="pg-nav-links" aria-label="Primary">
-          <NavLink to="/product" className="pg-nav-link">product</NavLink>
-          <NavLink to="/pricing" className="pg-nav-link">pricing</NavLink>
-          <NavLink to="/enterprise" className="pg-nav-link">enterprise</NavLink>
-          <NavLink to="/docs" className="pg-nav-link">docs</NavLink>
+    <header className={`site-header${solid ? " site-header-solid" : ""}`}>
+      <div className="shell site-header-inner">
+        <Wordmark />
+        <nav className="site-nav" aria-label="Primary">
+          {LINKS.map((link) => (
+            <NavLink key={link.to} to={link.to} className="site-nav-link">
+              {link.label}
+            </NavLink>
+          ))}
         </nav>
-        <div className="pg-nav-actions">
+        <div className="site-actions">
           {user ? (
-            <Link to="/dashboard" className="pg-btn pg-btn-primary">dashboard</Link>
+            <Link to="/dashboard" className="btn btn-primary btn-sm">
+              Open app
+            </Link>
           ) : (
             <>
-              <Link to="/sign-in" className="pg-btn pg-btn-ghost">sign in</Link>
-              <Link to="/sign-up" className="pg-btn pg-btn-primary">feed a repository</Link>
+              <Link to="/sign-in" className="site-signin">
+                Sign in
+              </Link>
+              <Link to="/sign-up" className="btn btn-primary btn-sm site-cta">
+                Scan a repo
+              </Link>
             </>
           )}
+          <button
+            type="button"
+            className="site-menu-button"
+            aria-expanded={open}
+            aria-controls={menuId}
+            onClick={() => setOpenOn(open ? null : location.pathname)}
+          >
+            {open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+            <span className="visually-hidden">{open ? "Close menu" : "Open menu"}</span>
+          </button>
         </div>
+      </div>
+      <div id={menuId} className="site-menu" hidden={!open}>
+        <nav className="shell site-menu-inner" aria-label="Primary mobile">
+          {LINKS.map((link) => (
+            <NavLink key={link.to} to={link.to} className="site-menu-link">
+              {link.label}
+            </NavLink>
+          ))}
+          {!user && (
+            <NavLink to="/sign-in" className="site-menu-link">
+              Sign in
+            </NavLink>
+          )}
+          <Link to={user ? "/dashboard" : "/sign-up"} className="btn btn-primary btn-block">
+            {user ? "Open app" : "Scan a repo"}
+          </Link>
+        </nav>
       </div>
     </header>
   );

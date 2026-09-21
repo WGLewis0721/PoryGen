@@ -1,100 +1,88 @@
 # Demo flow
 
-Scripted walkthrough of each acceptance scenario. All were exercised live against the
-deployed Supabase project during this build except where noted.
+Two demos exist, for two audiences.
 
-## A — Public product
+## 1. Public sample demo — `/demo` (no account)
 
-Open `/`. Bit-Critter hero, "Own your code. Prove your provenance.", terminal readout,
-pipeline strip. Navigate `/product`, `/pricing`, `/enterprise`, `/docs` via the nav.
-Pricing recomposes responsively; resize to 320px and confirm no horizontal overflow.
+For a prospective customer who should understand PoryGen in about 90 seconds without signing up,
+confirming an email, configuring anything, or installing an extension.
 
-## B — Account
+**What's real and what isn't.** The repository ("Lattice", `lattice-app`) and the "public
+source" projects (under `git.example.org`, a reserved domain) are fictional and written for the
+demo. The scan is real: `src/features/demo/sampleEngine.ts` runs the production
+`runScanPipeline` in the browser with a `sample-corpus` provider built on the same
+`createStaticCorpusProvider` as real scans. 307 of the sample's 312 files are simulated as clear
+(paths only); the five real sample files are scanned. The page is labelled *Sample interactive
+demo* throughout. No backend calls, nothing written.
 
-`/sign-up` → enter email/password → confirmation-email gate (real Supabase Auth
-behavior; confirm via the Supabase dashboard or `email_confirmed_at` in a real deploy) →
-`/sign-in` → session persists across a page refresh (verified: `supabase-js` restores
-the session from `localStorage` on load) → sign out via the sidebar.
+**Guided path:**
 
-## C — Repository (real, live-tested)
+1. **Start** — context: the agent committed `a3f9c21` "Add API rate limiting". *Run sample scan.*
+2. **Scanning** — progress over file paths and pipeline phases (skipped under reduced motion).
+3. **Summary** — 312 files checked: 309 clear · 1 common pattern · 1 review suggested · 1 strong
+   source match. Findings list with scores and licenses. *Open finding.*
+4. **Finding** — *Strong source match in `src/api/rateLimit.ts`*: your code beside the possible
+   source with matched lines highlighted; similarity 93% (74 of 80 structural fingerprints);
+   possible source `git.example.org/sample-oss/slidewindow` (fictional); license GPL-3.0 and what
+   it means; the engine's "why it was flagged" sentence; what was compared against. Actions:
+   *Replace it — simulate the fix* (recommended), *Start review*, *Dismiss as false positive*,
+   *Accept the risk*.
+5. **Fix** — the replacement in `b81e0d4`: a different design (fixed-window counter on the app's
+   cache). *Record fix and rescan.*
+6. **Rescan** — the real pipeline runs on the new revision.
+7. **Resolved** — 93% → 6% (below the 55% threshold), counts update (0 strong), the stage rail
+   reads FOUND → REVIEWED → REMEDIATED → RESCANNED → RESOLVED, and the history lists detected,
+   fix recorded, clean rescan.
+8. **End** — "Want PoryGen watching your real repo?" → *Scan your repo* (`/sign-up`).
 
-Signed in → `/repositories/new` → paste a public GitHub URL (e.g.
-`https://github.com/expressjs/cors`) → **Run scan**. Verified live: status progresses
-`ingesting → indexing → normalizing_ast → fingerprinting → analyzing_licenses →
-building_provenance_summary → complete`, terminal fills with real counts, 8 real
-dependency license findings resolved via the npm registry, risk level `clear`.
+**Alternate paths:** *Dismiss* and *Accept the risk* require a reason (an empty reason is
+refused with an inline error), record it in history, and explain that the decision survives
+rescans; *Try the fix path instead* reopens the finding and the history keeps the detour.
 
-## D — Deterministic demo (Lattice)
+Covered by `src/features/demo/DemoPage.test.tsx` (full guided path and the reason rule) and
+`sampleEngine.test.ts`, which also keeps the homepage's pinned sample numbers identical to the
+engine's output.
 
-`/repositories` → **porygen/lattice** (tagged `DEMO`) → **view scan**. Shows the seeded,
-deterministic scan: `blocking` risk, 4 findings —
+## 2. Authenticated walkthrough
 
-- **A** — AGPL-3.0 dependency `lattice-forms`, `BLOCKING`.
-- **B** — structural fingerprint match against the bundled `quicksort` corpus entry,
-  `REVIEW`, confidence 100% (genuinely computed by `scripts/seed-lattice.ts` running the
-  real winnowing pipeline over a renamed/reformatted probe — not hand-typed).
-- **C** — AI-assisted 126-line insertion followed by human rework, `MIXED PROVENANCE`,
-  `REVIEW`.
-- **D** — MIT dependency `lattice-utils`, `CLEAR`.
+1. **Account** — `/sign-up` → confirmation email (Supabase Auth) → `/sign-in`.
+2. **Scan** — `/repositories/new` → a public GitHub URL (e.g. `https://github.com/expressjs/cors`)
+   → *Run scan*. The scan page shows each phase live, then per-file results (clear / common
+   pattern / review suggested / strong source match), *Needs attention*, informational rows, and
+   *What this scan compared against*.
+3. **Finding** — open a flagged finding: what PoryGen found, where it is and what it might
+   resemble (side by side), how strong the evidence is, license context, why it matters, and
+   *Did the fix pass?*. Actions on the right: start review, record a fix (with a revision), dismiss
+   or accept risk (reason required), add a note, rescan.
+4. **Rescan** — *Rescan repository*. `sync_tracked_findings` resolves what the scan re-checked
+   and no longer sees, records a failed fix if it's still there, and reopens anything that came
+   back.
+5. **Overview** — `/dashboard`: *Your codebase today* (clear changes, review suggested, open
+   source collisions, resolved), open findings, recent activity and resolutions, repositories.
+6. **History** — `/history`: every resolution event across repositories; *Editor attribution*
+   shows the optional VS Code ledger.
+7. **Evidence** — from a scan, *Export evidence*: JSON download or print summary, including
+   resolution history and coverage.
+8. **Sample repository** — `porygen/lattice` (public, read-only) shows all three outcomes: a
+   strong match in review, an AGPL dependency with an accepted risk and its reason, and a legacy
+   file resolved by a clean rescan after it was deleted. Actions are disabled there.
 
-## E — Provenance
+Requires the resolution-history migration; without it, steps 3–6 show an explicit "not enabled
+on this deployment yet" state.
 
-`/provenance` (repository selector → porygen/lattice). Dual-column ledger: 26 seeded
-events on the left (timestamp, source, file, tool, hash prefix), hash-chain state on the
-right. **Chain intact · 26 events.** Composition tiles show the real percentage split
-across `human`/`ai`/`imported`/`unknown` computed from the actual seeded events (not a
-hardcoded number).
+## 3. Billing (operator)
 
-## F — Evidence
+`/billing` shows the current plan (derived from verified webhooks), usage against the plan
+(displayed, not enforced), and plan options. With subscription prices unconfigured, checkout is
+disabled and `create-checkout` answers `PLAN_NOT_CONFIGURED`. `/billing/diagnostics` shows
+non-secret Stripe state, subscription price status, and the separate APEX dogfood section — see
+[APEX_DOGFOOD.md](APEX_DOGFOOD.md).
 
-From a completed scan → **Export evidence** → `/scans/:id/evidence`. **Export evidence
-(JSON)** downloads a file containing repository identity, scan metadata, all findings,
-the CycloneDX SBOM, provenance summary/events, and hash-chain state. **print report**
-opens the browser print dialog against a print-styled version of the same report. For a
-`CLEAR`-risk scan with zero blocking findings, a **PoryGen Verified: Clear** panel
-appears with copyable Markdown/HTML badge snippets.
-
-## G — VS Code
+## Quality checks
 
 ```bash
-cd packages/vscode-extension
 npm install
-npm run compile
+npm run build   # tsc -b && vite build
+npm test        # vitest, all workspaces + PGlite database tests
+npm run lint    # oxlint (warnings only)
 ```
-
-Open the folder in VS Code, press F5 → Extension Development Host. Edit any file — events
-append to `.porygen/provenance-ledger.jsonl` and stream to the **PoryGen Provenance**
-output channel. `npm test` (from repo root or the package) runs
-`test/classifier.test.ts` — deterministic classification verified via fixtures, no VS
-Code API required.
-
-## H — Billing
-
-`/billing` → **Upgrade to Pro** → `create-checkout`. In this environment (no sandbox
-Stripe key configured) this returns a clear `STRIPE_NOT_CONFIGURED` message rather than a
-fake success state — verified live. With real sandbox credentials configured (see
-[STRIPE_SETUP.md](STRIPE_SETUP.md)), the same code path creates a real Stripe Customer
-and Checkout Session, redirects to Stripe, returns to `/billing/success`
-(which explicitly does *not* claim payment succeeded until a webhook-confirmed
-`billing_events` row exists), and `/billing/diagnostics` exposes every non-secret ID
-needed to verify the chain manually.
-
-## I — APEX dogfood readiness
-
-`/billing/diagnostics` shows the configured (or explicitly missing) `STRIPE_PRO_PRICE_ID`
-and `APEX_CUSTOMER_ID` — verified live as both reporting "not configured" in this
-environment, with no fabricated values. [`docs/APEX_DOGFOOD.md`](APEX_DOGFOOD.md) gives
-the operator the exact next steps and the attribution contract.
-
-## J — Quality
-
-```bash
-npm install   # succeeds
-npm run build # tsc -b && vite build — succeeds, 0 TypeScript errors
-npm test      # vitest — 53/53 passing across provenance-core and vscode-extension
-```
-
-No dead primary navigation or CTA — every route in `src/App.tsx` resolves to a real page.
-No secrets committed (`.env.local` gitignored, only `.env.example` tracked). Mobile
-layout (320–768px) recomposes via the CSS in `src/styles/*.css` — pricing plate, ledger
-columns, and app shell all have explicit narrow-viewport rules.
