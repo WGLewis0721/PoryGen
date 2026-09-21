@@ -1,0 +1,4 @@
+Title: REST APIs
+Tags: web, api, http
+
+A REST API lets software request or change resources over HTTP. A client typically sends a request to a URL and receives structured data such as JSON. Search applications often use an API to call an external search provider.
