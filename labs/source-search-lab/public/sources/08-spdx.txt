@@ -1,4 +1,0 @@
-Title: SPDX license identifiers
-Tags: licenses, open source, spdx
-
-SPDX identifiers provide standardized short names for software licenses. Tools can use identifiers such as MIT or Apache-2.0 to exchange license information consistently rather than relying on many different free-form license names.
