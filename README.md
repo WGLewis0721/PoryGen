@@ -7,7 +7,7 @@ similarity and license risk before you ship someone else's code as your own.
 
 > If AI coding becomes normal, checking what the AI gave you should become normal too.
 
-🔗 **Live**: [porygen.william-glewis17.workers.dev](https://porygen.william-glewis17.workers.dev) ·
+🔗 **Live**: [porygen.vercel.app](https://porygen.vercel.app) ·
 **Sample demo (no account)**: `/demo`
 
 ## The loop
@@ -109,6 +109,7 @@ shows an explicit "not enabled on this deployment yet" state instead of failing.
 
 ## Documentation
 
+- [ROADMAP.md](ROADMAP.md) — product, commercialization, APEX validation, and execution sequence
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system shape, scan path, provider seam, async-worker evolution
 - [docs/SCANNER.md](docs/SCANNER.md) — normalization, Winnowing, providers, bands, coverage, limits
 - [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — tables and the resolution-history model
