@@ -30,6 +30,19 @@ function riskToPolicy(risk: ScanRow["risk_level"]): PolicyStatus {
   return "UNKNOWN";
 }
 
+// <!-- OPUS_TASK: Scanner physiological choreography
+// Current behavior: critterStateFor() maps scan.status/risk_level directly to one of
+// BitCritter's six CSS-driven states; each state's autonomic animation (breathing,
+// blink, scanline, glitch) is already implemented and reduced-motion-safe.
+// Desired improvement: richer physical behavior keyed to scan *microstates* (e.g. a
+// distinct beat when analyzing_licenses finds something) and terminal-output rhythm
+// synchronized to it.
+// Implementation constraints: event-driven and deterministic — no random animation
+// loops; drive transitions off real scan.status changes, not timers.
+// Reduced-motion requirement: must not regress the existing prefers-reduced-motion
+// handling in BitCritter.css.
+// Completion criteria: the page functions identically with this incomplete — it is
+// additive choreography, not required behavior. -->
 function critterStateFor(scan: ScanRow | null): BitCritterState {
   if (!scan) return "idle";
   if (scan.status === "failed") return "integrity_warning";

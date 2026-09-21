@@ -13,6 +13,19 @@ const SOURCE_LABEL: Record<ProvenanceEventRow["source_type"], string> = {
   unknown: "unknown",
 };
 
+// <!-- OPUS_TASK: Deterministic provenance telemetry player
+// Current behavior: the full seeded event list renders statically in the event-stream
+// and chain columns, filterable by source type.
+// Desired improvement: a playback controller (play/pause/reset/1x/2x) over the seeded
+// timeline, synchronizing event-stream scroll position, attestation-panel highlighting,
+// and the ledger's chain-status BitCritter to a simulated "current time" advancing
+// through the real event_timestamp sequence.
+// Implementation constraints: deterministic timeline data only (the real, already-
+// ordered seeded events) — no random DOM mutation.
+// Reduced-motion requirement: auto-play must respect prefers-reduced-motion (default to
+// paused, manual step-through still available).
+// Completion criteria: the page is fully functional today without this — it is additive
+// playback polish over data that already renders correctly. -->
 function toChainEvent(row: ProvenanceEventRow): ProvenanceEvent {
   return {
     id: row.id,

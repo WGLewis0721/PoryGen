@@ -1,0 +1,37 @@
+{
+  "unit": {
+    "runner": "vitest",
+    "command": "npm test",
+    "lastResult": "53/53 passing",
+    "coverage": [
+      { "id": "lexical-normalize", "file": "packages/provenance-core/test/lexicalNormalize.test.ts", "status": "passing", "asserts": "rename/format invariance, keyword/punctuation preservation, language detection" },
+      { "id": "tree-sitter-normalize", "file": "packages/provenance-core/test/treeSitterNormalize.test.ts", "status": "passing", "asserts": "real WASM parsing, rename invariance via genuine AST structure" },
+      { "id": "winnow", "file": "packages/provenance-core/test/winnow.test.ts", "status": "passing", "asserts": "k-gram hashing, window minimum selection, determinism, overlap computation" },
+      { "id": "corpus-match", "file": "packages/provenance-core/test/corpus.test.ts", "status": "passing", "asserts": "renamed copy of corpus entry flagged, unrelated code not flagged, license carried through" },
+      { "id": "license-scanner", "file": "packages/provenance-core/test/license.test.ts", "status": "passing", "asserts": "SPDX detection, policy mapping (CLEAR/REVIEW/BLOCKING/UNKNOWN), manifest parsing, malformed-JSON tolerance" },
+      { "id": "provenance-events", "file": "packages/provenance-core/test/events.test.ts", "status": "passing", "asserts": "hash chain linkage, tamper detection, in-toto statement shape, Postgres timestamp round-trip stability, optional-field presence stability" },
+      { "id": "classifier", "file": "packages/provenance-core/test/classifier.test.ts", "status": "passing", "asserts": "bulk-insert/human/imported/ambiguous classification, config overrides, composition summary" },
+      { "id": "vscode-classifier", "file": "packages/vscode-extension/test/classifier.test.ts", "status": "passing", "asserts": "same classifier behaviors, runnable without the VS Code API" }
+    ]
+  },
+  "manual_verification": {
+    "method": "live browser session against the deployed Supabase project (fxeuahfgwydwzflymsoy)",
+    "scenarios": [
+      { "id": "scenario-a-public-product", "status": "verified", "notes": "landing/product/pricing/enterprise render; nav resolves" },
+      { "id": "scenario-b-account", "status": "verified", "notes": "sign-up, email-confirm-gated sign-in, session persists across load, sign-out" },
+      { "id": "scenario-c-repository", "status": "verified", "notes": "fed octocat/Hello-World and expressjs/cors; real GitHub ingestion, real npm license lookups, findings persisted and browsable" },
+      { "id": "scenario-c-rls-bug-found-and-fixed", "status": "verified", "notes": "missing scan_findings INSERT policy caught live, fixed, re-verified" },
+      { "id": "scenario-d-lattice-demo", "status": "verified", "notes": "seeded repository visible with DEMO badge, 4 findings match spec exactly" },
+      { "id": "scenario-e-provenance", "status": "verified", "notes": "chain showed 'verification failed' twice during development; both root causes fixed and re-verified as 'chain intact'" },
+      { "id": "scenario-f-evidence", "status": "verified", "notes": "JSON export and print report render; Verified:Clear badge panel appears for the expressjs/cors clear scan" },
+      { "id": "scenario-g-vscode", "status": "verified", "notes": "tsc compile clean; classifier tests pass" },
+      { "id": "scenario-h-billing", "status": "partial", "notes": "create-checkout verified to fail closed with STRIPE_NOT_CONFIGURED (no sandbox key in this environment); UI paths (billing status/diagnostics/success) render correctly against empty state" },
+      { "id": "scenario-i-apex-readiness", "status": "verified", "notes": "diagnostics correctly report APEX_CUSTOMER_ID and Stripe as not configured, no fabricated values" },
+      { "id": "scenario-j-quality", "status": "verified", "notes": "npm install / npm run build / npm test all clean; no dead nav found" }
+    ]
+  },
+  "build": {
+    "typecheck": "tsc -b — 0 errors",
+    "bundler": "vite build — succeeds (main chunk 556KB, noted as a code-splitting opportunity, not an error)"
+  }
+}
