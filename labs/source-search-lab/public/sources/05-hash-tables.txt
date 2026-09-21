@@ -1,0 +1,4 @@
+Title: Hash tables
+Tags: algorithms, lookup, data structures
+
+A hash table stores key and value pairs and uses a hash function to quickly choose where a key should be stored. Search systems use hashing in many places because exact lookups can be much faster than scanning every record.
