@@ -4,33 +4,79 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Source Search Lab</title>
+  <title>PoryGen Source Search Lab V2</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <main class="page">
-    <section class="search-box">
-      <p class="eyebrow">PoryGen experiment</p>
-      <h1>Source Search Lab</h1>
-      <p class="intro">Searches 10 sources in this project first. Private mode is the default: your query stays on this server and is not cached or sent to a third party.</p>
+    <header class="masthead">
+      <p class="eyebrow">PoryGen experiment · V2</p>
+      <h1>Scan a public repository.</h1>
+      <p class="lede">One scan fetches supported source files, searches a small prebuilt public-code index, verifies matching regions, and returns evidence you can review.</p>
+    </header>
 
-      <form id="search-form">
-        <label class="sr-only" for="query">Search</label>
-        <div class="search-row">
-          <input id="query" name="q" type="search" placeholder="Try: winnowing fingerprints" autocomplete="off" autocapitalize="off" spellcheck="false" required>
-          <button type="submit">Search</button>
+    <section class="scan-panel">
+      <form id="scan-form">
+        <label for="repository-url">Public GitHub repository</label>
+        <div class="scan-row">
+          <input id="repository-url" name="repositoryUrl" type="url" inputmode="url"
+            placeholder="https://github.com/sindresorhus/yocto-queue"
+            autocomplete="off" autocapitalize="off" spellcheck="false" required>
+          <button id="scan-button" type="submit">Scan</button>
         </div>
-        <label class="privacy-option">
-          <input id="allow-web" type="checkbox">
-          Public demo only: allow web fallback if no local match. This sends the query to the configured search provider.
-        </label>
       </form>
 
-      <p id="status" class="status" aria-live="polite">Private mode ready.</p>
+      <div id="progress-wrap" class="progress-wrap" hidden>
+        <progress id="progress"></progress>
+        <span id="progress-label">Fetching repository and scanning…</span>
+      </div>
+
+      <p class="privacy-note">Public repositories only. Customer code is processed transiently, is not sent to a public search engine, and scan responses use <code>no-store</code>.</p>
+      <p id="status" class="status" aria-live="polite">Ready.</p>
     </section>
 
-    <section id="results" class="results" aria-label="Search results"></section>
+    <section id="scan-meta" class="scan-meta" hidden></section>
+    <section id="resolved" class="resolved" hidden></section>
+    <section id="results" class="results" aria-label="Scan results"></section>
   </main>
+
+  <template id="finding-template">
+    <article class="finding">
+      <div class="finding-head">
+        <div>
+          <span class="classification"></span>
+          <h2 class="finding-title"></h2>
+        </div>
+        <span class="rescan-state"></span>
+      </div>
+      <p class="explanation"></p>
+      <div class="metrics"></div>
+      <div class="match-grid">
+        <section>
+          <h3>Customer</h3>
+          <p class="customer-location location"></p>
+          <pre class="customer-code"></pre>
+        </section>
+        <section>
+          <h3>Indexed public source</h3>
+          <p class="source-location location"></p>
+          <pre class="source-code"></pre>
+        </section>
+      </div>
+      <div class="license"></div>
+      <div class="actions">
+        <a class="review-source button-link" target="_blank" rel="noreferrer">Review source</a>
+        <select class="dismiss-reason" aria-label="Dismiss reason">
+          <option value="expected-common-pattern">Expected/common pattern</option>
+          <option value="reviewed-acceptable">Reviewed and acceptable</option>
+          <option value="known-origin">Known source/origin</option>
+          <option value="other">Other</option>
+        </select>
+        <button class="dismiss-button" type="button">Dismiss</button>
+      </div>
+      <p class="dismissed-note" hidden></p>
+    </article>
+  </template>
 
   <script src="/app.js" defer></script>
 </body>
