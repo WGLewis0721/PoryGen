@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "yocto-queue-index-js",
+      "repository": "sindresorhus/yocto-queue",
+      "commit": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+      "path": "index.js",
+      "blobSha": "627ed535f3163b37f2e3b208a23788fd0a715eba",
+      "language": "javascript",
+      "license": "MIT",
+      "licensePath": "license",
+      "licenseUrl": "https://github.com/sindresorhus/yocto-queue/blob/72a8fa96a9d389765cdf2bb9c6daba8302fc375d/license"
+    },
+    {
+      "id": "date-fns-add-business-days",
+      "repository": "date-fns/date-fns",
+      "commit": "18cbd436f1428d0f45f89f710df65f62546c42f0",
+      "path": "pkgs/core/src/addBusinessDays/index.ts",
+      "blobSha": "5199659960a152c310456b8de0e465fb015ece43",
+      "language": "typescript",
+      "license": "MIT",
+      "licensePath": "pkgs/core/LICENSE.md",
+      "licenseUrl": "https://github.com/date-fns/date-fns/blob/18cbd436f1428d0f45f89f710df65f62546c42f0/pkgs/core/LICENSE.md"
+    },
+    {
+      "id": "date-fns-add-days",
+      "repository": "date-fns/date-fns",
+      "commit": "18cbd436f1428d0f45f89f710df65f62546c42f0",
+      "path": "pkgs/core/src/addDays/index.ts",
+      "blobSha": "0b623dbff124a9f59d7cfab1c1117d1ac8e04e84",
+      "language": "typescript",
+      "license": "MIT",
+      "licensePath": "pkgs/core/LICENSE.md",
+      "licenseUrl": "https://github.com/date-fns/date-fns/blob/18cbd436f1428d0f45f89f710df65f62546c42f0/pkgs/core/LICENSE.md"
+    },
+    {
+      "id": "date-fns-normalize-interval",
+      "repository": "date-fns/date-fns",
+      "commit": "18cbd436f1428d0f45f89f710df65f62546c42f0",
+      "path": "pkgs/core/src/_lib/normalizeInterval/index.ts",
+      "blobSha": "4f80ca8628c1ca9ca5e531cb4dc4bc608142c191",
+      "language": "typescript",
+      "license": "MIT",
+      "licensePath": "pkgs/core/LICENSE.md",
+      "licenseUrl": "https://github.com/date-fns/date-fns/blob/18cbd436f1428d0f45f89f710df65f62546c42f0/pkgs/core/LICENSE.md"
+    },
+    {
+      "id": "requests-structures",
+      "repository": "psf/requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "path": "src/requests/structures.py",
+      "blobSha": "7675eaf15a181dada66c02bb0468dc00d6f523b3",
+      "language": "python",
+      "license": "Apache-2.0",
+      "licensePath": "LICENSE",
+      "licenseUrl": "https://github.com/psf/requests/blob/611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60/LICENSE"
+    },
+    {
+      "id": "requests-hooks",
+      "repository": "psf/requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "path": "src/requests/hooks.py",
+      "blobSha": "11ff9e9f27e76f5ef6b9b609e88c2f418d655e16",
+      "language": "python",
+      "license": "Apache-2.0",
+      "licensePath": "LICENSE",
+      "licenseUrl": "https://github.com/psf/requests/blob/611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60/LICENSE"
+    }
+  ]
+}
