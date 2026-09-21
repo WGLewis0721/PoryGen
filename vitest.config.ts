@@ -7,6 +7,6 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    exclude: ['**/node_modules/**', 'packages/vscode-extension/**'],
+    exclude: ['**/node_modules/**'],
   },
 })

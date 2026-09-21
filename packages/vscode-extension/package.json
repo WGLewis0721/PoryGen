@@ -1,0 +1,46 @@
+{
+  "name": "porygen-provenance-capture",
+  "displayName": "PoryGen Provenance Capture",
+  "description": "Captures editor-level provenance signals (edit shape, not content) and classifies them conservatively as human, AI-assisted, imported, or unknown.",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "porygen.showLedger",
+        "title": "PoryGen: Show Local Provenance Ledger"
+      },
+      {
+        "command": "porygen.flushEvents",
+        "title": "PoryGen: Flush Captured Events"
+      }
+    ],
+    "configuration": {
+      "title": "PoryGen",
+      "properties": {
+        "porygen.classifier.bulkInsertMinLines": { "type": "number", "default": 8 },
+        "porygen.classifier.bulkInsertMaxElapsedMs": { "type": "number", "default": 400 },
+        "porygen.classifier.humanMaxCharsPerEvent": { "type": "number", "default": 40 },
+        "porygen.classifier.humanMinElapsedMs": { "type": "number", "default": 150 },
+        "porygen.classifier.importedPasteMinChars": { "type": "number", "default": 400 }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -p ./ -w",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.13.3",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.11"
+  }
+}
