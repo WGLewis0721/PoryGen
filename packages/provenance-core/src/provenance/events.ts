@@ -20,11 +20,50 @@ export function canonicalize(value: unknown): string {
   return `{${body}}`;
 }
 
+/**
+ * Builds the exact field set that gets hashed, with every optional field
+ * explicitly defaulted to `null`. This is deliberate: `canonicalize` sorts
+ * and stringifies whatever keys are *present*, so a caller who omits an
+ * optional field (e.g. a fresh `ProvenanceEventInput` literal that never
+ * mentions `parentEventId`) and a caller who reads it back from a database
+ * row (which always has the column, `null` or not) would otherwise produce
+ * different canonicalized strings — and therefore different hashes — for
+ * the same logical event. Normalizing here makes hashing independent of
+ * which optional keys a given writer happened to include.
+ *
+ * `eventTimestamp` is additionally re-parsed and re-serialized through
+ * `Date`. Postgres's `timestamptz` text output ("2026-09-15 09:02:00+00")
+ * is not byte-identical to the ISO-8601 string ("2026-09-15T09:02:00.000Z")
+ * this library writes, even though both name the same instant — so hashing
+ * the raw string a caller happens to have would make every event fail
+ * verification the moment it round-trips through the database. Hashing the
+ * instant, not its string spelling, keeps verification stable across that
+ * round-trip.
+ */
+function canonicalEventShape(input: ProvenanceEventInput, previousEventHash: string | null) {
+  return {
+    ownerId: input.ownerId ?? null,
+    repositoryId: input.repositoryId,
+    filePath: input.filePath,
+    sourceType: input.sourceType,
+    actorType: input.actorType,
+    provider: input.provider ?? null,
+    tool: input.tool ?? null,
+    commitSha: input.commitSha ?? null,
+    parentEventId: input.parentEventId ?? null,
+    contentHash: input.contentHash,
+    diffHash: input.diffHash ?? null,
+    eventTimestamp: new Date(input.eventTimestamp).toISOString(),
+    metadata: input.metadata ?? {},
+    previousEventHash,
+  };
+}
+
 export async function hashEvent(
   input: ProvenanceEventInput,
   previousEventHash: string | null,
 ): Promise<string> {
-  return sha256Hex(canonicalize({ ...input, previousEventHash }));
+  return sha256Hex(canonicalize(canonicalEventShape(input, previousEventHash)));
 }
 
 /**

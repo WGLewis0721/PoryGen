@@ -53,6 +53,8 @@ export interface ScanSummaryJson {
     humanModifiedAi: number;
     unknown: number;
   };
+  repoContentHash?: string;
+  sbom?: unknown;
 }
 
 export interface ScanRow {

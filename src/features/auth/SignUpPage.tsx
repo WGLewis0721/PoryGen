@@ -1,12 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { BitCritter } from "../../components/BitCritter";
 import { useAuth } from "./AuthContext";
 import "./auth.css";
 
 export function SignUpPage() {
   const { signUp, configured } = useAuth();
-  const navigate = useNavigate();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

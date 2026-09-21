@@ -55,6 +55,27 @@ describe("provenance hash chain", () => {
     const chain = await buildChain([makeInput({ contentHash: "a" }), makeInput({ contentHash: "b" })]);
     expect(chain[0].eventHash).not.toBe(chain[1].eventHash);
   });
+
+  it("still verifies when an event round-trips through Postgres's timestamptz text format", async () => {
+    // Postgres renders timestamptz as "2026-09-15 09:02:00+00", not the
+    // ISO-8601 "2026-09-15T09:02:00.000Z" this library writes — same
+    // instant, different string. A naive raw-string hash would break the
+    // moment a seeded/stored event round-trips through the database.
+    const chain = await buildChain([makeInput({ eventTimestamp: "2026-01-01T00:00:00.000Z" })]);
+    const roundTripped = { ...chain[0], eventTimestamp: "2026-01-01 00:00:00+00" };
+    const result = await verifyChain([roundTripped]);
+    expect(result.intact).toBe(true);
+  });
+
+  it("still verifies when an optional field absent at write time comes back as an explicit null on read", async () => {
+    // A DB row always has every column; a freshly-constructed
+    // ProvenanceEventInput literal may omit optional keys entirely. Both
+    // must hash identically.
+    const chain = await buildChain([makeInput()]);
+    const readBack = { ...chain[0], parentEventId: null, diffHash: null };
+    const result = await verifyChain([readBack]);
+    expect(result.intact).toBe(true);
+  });
 });
 
 describe("in-toto statement", () => {
