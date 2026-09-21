@@ -1,0 +1,4 @@
+Title: A small Node HTTP server
+Tags: node, javascript, http, server
+
+Node includes an HTTP module that can create a basic web server without a framework. The server receives a request, chooses how to handle its URL, and sends a response. This is enough for a small educational search application.
