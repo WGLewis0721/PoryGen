@@ -27,3 +27,14 @@ button:hover { background: #333; }
   .search-row { flex-direction: column; }
   button { min-height: 48px; }
 }
+
+.privacy-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #666;
+}
+.privacy-option input { flex: 0 0 auto; margin-top: 2px; }
