@@ -1,49 +1,55 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { BitCritter } from "../../components/BitCritter";
-import { useAuth } from "../../features/auth/AuthContext";
+import { useAuth } from "../auth/AuthContext";
+import { useDocumentTitle } from "../../components/useDocumentTitle";
 import { listBillingEvents } from "../../lib/api";
 import type { BillingEventRow } from "../../lib/dbTypes";
 
 export function BillingSuccessPage() {
-  const [searchParams] = useSearchParams();
-  const sessionId = searchParams.get("session_id");
+  useDocumentTitle("Checkout returned — PoryGen");
+  const [params] = useSearchParams();
+  const sessionId = params.get("session_id");
   const { user } = useAuth();
-  const [matchingEvent, setMatchingEvent] = useState<BillingEventRow | null>(null);
+  const [match, setMatch] = useState<BillingEventRow | null>(null);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
     if (!user || !sessionId) return;
-    listBillingEvents(user.id).then((events) => {
-      setMatchingEvent(events.find((e) => e.checkout_session_id === sessionId) ?? null);
-    });
+    listBillingEvents(user.id)
+      .then((events) => setMatch(events.find((e) => e.checkout_session_id === sessionId) ?? null))
+      .finally(() => setChecked(true));
   }, [user, sessionId]);
 
+  const plan = (match?.payload_summary_json as Record<string, unknown> | undefined)?.porygen_plan;
+
   return (
-    <div style={{ maxWidth: 560 }}>
-      <div style={{ display: "flex", gap: 20, alignItems: "center", marginBottom: 24 }}>
-        <BitCritter state={matchingEvent ? "healthy" : "idle"} size={64} />
+    <div className="narrow-page">
+      <header className="page-head">
         <div>
-          <h1 style={{ fontSize: "1.2rem" }}>Checkout returned</h1>
-          <p style={{ marginTop: 4, color: "var(--pg-structure-dim)", fontSize: "0.85rem" }}>
-            Session {sessionId ?? "unknown"}
-          </p>
+          <h1>Checkout returned</h1>
+          <p className="mono">Session {sessionId ?? "unknown"}</p>
         </div>
-      </div>
-
-      <div className="pg-panel" style={{ padding: 20, marginBottom: 24 }}>
-        <p style={{ fontSize: "0.85rem", color: "var(--pg-structure-dim)", lineHeight: 1.7 }}>
-          Reaching this page is <strong>not proof of payment</strong>. PoryGen's billing state is
-          authoritative only once the Stripe webhook has verified and processed the
-          <code> checkout.session.completed</code> event.
-        </p>
-        <p style={{ marginTop: 12, fontSize: "0.85rem", fontWeight: 700 }}>
-          {matchingEvent ? "Webhook confirmed: this session was processed." : "Webhook not yet observed for this session."}
-        </p>
-      </div>
-
-      <div style={{ display: "flex", gap: 12 }}>
-        <Link to="/billing" className="pg-btn pg-btn-primary">View billing status</Link>
-        <Link to="/billing/diagnostics" className="pg-btn pg-btn-ghost">Diagnostics</Link>
+      </header>
+      <p className="notice">
+        Arriving here is <strong>not</strong> proof of payment. Your plan updates only after PoryGen verifies Stripe's{" "}
+        <code>checkout.session.completed</code> webhook.
+      </p>
+      <p className={`notice block-gap ${match ? "notice-ok" : "notice-warn"}`} role="status">
+        {!checked
+          ? "Checking for the webhook…"
+          : match
+            ? plan === "apex_dogfood"
+              ? "Webhook confirmed. This was the APEX dogfood test purchase; it doesn't change a plan."
+              : "Webhook confirmed. Your plan is updated."
+            : "The webhook hasn't arrived yet. Refresh in a moment."}
+      </p>
+      <div className="cta-row">
+        <Link to="/billing" className="btn btn-primary">
+          Plan and billing
+        </Link>
+        <Link to="/billing/diagnostics" className="link-arrow">
+          Diagnostics
+        </Link>
       </div>
     </div>
   );

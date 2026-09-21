@@ -1,7 +1,6 @@
 /*
-  Bit-Critter — PoryGen's cybernetic familiar. Autonomic, not performative:
-  a resting device pulse, not a cartoon doing a dance. All motion is
-  CSS-driven and keyed off `data-state` / `data-size` on the root <svg>.
+  Bit-Critter — a small in-product status familiar (not the public brand).
+  Autonomic, not performative: a resting pulse keyed off `data-state`.
 */
 
 .pg-bitcritter {
@@ -9,31 +8,31 @@
 }
 
 .pg-bitcritter .pg-critter-facet {
-  transition: fill var(--pg-duration-base) var(--pg-ease-mechanical);
+  transition: fill var(--dur-2) var(--ease-out);
 }
 
 .pg-bitcritter .pg-critter-vital {
-  fill: var(--pg-accent);
-  animation: pg-vital-pulse 2.6s var(--pg-ease-mechanical) infinite;
+  fill: var(--mist-400);
+  animation: pg-vital-pulse 2.6s var(--ease-out) infinite;
   transform-origin: center;
   transform-box: fill-box;
 }
 
 .pg-bitcritter .pg-critter-lens {
-  fill: var(--pg-base-sunken);
-  stroke: var(--pg-accent);
+  fill: var(--ink-950);
+  stroke: var(--mist-400);
   stroke-width: 2;
 }
 
 .pg-bitcritter .pg-critter-lens-glint {
-  fill: var(--pg-accent);
+  fill: var(--cloud-100);
   animation: pg-blink 4.2s ease-in-out infinite;
   transform-origin: center;
   transform-box: fill-box;
 }
 
 .pg-bitcritter .pg-critter-body {
-  animation: pg-breathe 5.4s var(--pg-ease-mechanical) infinite;
+  animation: pg-breathe 5.4s var(--ease-out) infinite;
   transform-origin: center;
   transform-box: fill-box;
 }
@@ -44,14 +43,14 @@
 
 .pg-bitcritter .pg-critter-fracture {
   opacity: 0;
-  stroke: var(--pg-blocking);
+  stroke: var(--strong);
 }
 
 /* ---- state: idle (default) --------------------------------------------- */
 
 /* ---- state: ingesting --------------------------------------------------- */
 .pg-bitcritter[data-state="ingesting"] .pg-critter-vital {
-  fill: var(--pg-accent);
+  fill: var(--sunrise-500);
   animation-duration: 0.9s;
 }
 .pg-bitcritter[data-state="ingesting"] .pg-critter-scanline {
@@ -64,26 +63,29 @@
 
 /* ---- state: healthy ------------------------------------------------------ */
 .pg-bitcritter[data-state="healthy"] .pg-critter-vital {
-  fill: var(--pg-accent);
+  fill: var(--clear);
   animation-duration: 3.2s;
+}
+.pg-bitcritter[data-state="healthy"] .pg-critter-lens {
+  stroke: var(--clear);
 }
 
 /* ---- state: review -------------------------------------------------------- */
 .pg-bitcritter[data-state="review"] .pg-critter-vital {
-  fill: var(--pg-review);
+  fill: var(--review);
   animation: pg-vital-irregular 1.8s ease-in-out infinite;
 }
 .pg-bitcritter[data-state="review"] .pg-critter-lens {
-  stroke: var(--pg-review);
+  stroke: var(--review);
 }
 
 /* ---- state: blocking / contaminated --------------------------------------- */
 .pg-bitcritter[data-state="blocking"] .pg-critter-vital {
-  fill: var(--pg-blocking);
-  animation: pg-vital-pulse 0.5s var(--pg-ease-mechanical) infinite;
+  fill: var(--strong);
+  animation: pg-vital-pulse 0.5s var(--ease-out) infinite;
 }
 .pg-bitcritter[data-state="blocking"] .pg-critter-lens {
-  stroke: var(--pg-blocking);
+  stroke: var(--strong);
 }
 .pg-bitcritter[data-state="blocking"] .pg-critter-body {
   animation: pg-glitch 2.4s steps(1, end) infinite;
@@ -91,7 +93,7 @@
 
 /* ---- state: integrity_warning ---------------------------------------------- */
 .pg-bitcritter[data-state="integrity_warning"] .pg-critter-vital {
-  fill: var(--pg-integrity-fail);
+  fill: var(--strong);
   animation-duration: 2.2s;
 }
 .pg-bitcritter[data-state="integrity_warning"] .pg-critter-fracture {

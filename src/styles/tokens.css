@@ -1,55 +1,108 @@
 /*
-  PoryGen design tokens — Hardware Brutalism x Cybernetic Familiar.
-  ~60% deep slate / ~30% chalk silver structure / ~10% acid chartreuse.
-  border-radius is 0 everywhere except browser-native controls that refuse it.
+  PoryGen design tokens — see DESIGN.md for roles and usage.
+  Graphite ground, deep slate surfaces, sunrise accent used sparingly,
+  sand paper for editorial light sections. One accent per view.
 */
 :root {
   color-scheme: dark;
 
-  /* Core palette */
-  --pg-base: #101216;
-  --pg-base-raised: #16191f;
-  --pg-base-sunken: #0a0b0d;
-  --pg-structure: #e2e4e9;
-  --pg-structure-dim: #9a9fab;
-  --pg-structure-faint: #5c6270;
-  --pg-accent: #d4ff00;
-  --pg-accent-dim: #9bb800;
-  --pg-accent-ink: #0f1400;
+  /* Ground */
+  --ink-950: #0b0d10;
+  --ink-900: #101317;
+  --ink-850: #151a20;
+  --ink-800: #1b2129;
 
-  /* Semantic states — subordinate to the primary system, used sparingly */
-  --pg-blocking: #ff3b30;
-  --pg-blocking-dim: #4a1410;
-  --pg-review: #ff9f1c;
-  --pg-review-dim: #4a3210;
-  --pg-info: #4fc3f7;
-  --pg-integrity-fail: #ff3b30;
+  /* Deep slate blue — the brand's core surface */
+  --slate-800: #1c283f;
+  --slate-700: #26344f;
+  --slate-600: #34445f;
 
-  /* Structural rules */
-  --pg-divider: rgba(226, 228, 233, 0.15);
-  --pg-divider-strong: rgba(226, 228, 233, 0.32);
-  --pg-radius: 0px;
+  /* Text on dark */
+  --cloud-100: #eeebec;
+  --cloud-300: #c9c6c7;
+  --mist-400: #a0a2a9;
+  --mist-500: #7d8088;
 
-  /* Typography */
-  --pg-font-mono: "JetBrains Mono", "Space Mono", ui-monospace, "Cascadia Code", monospace;
-  --pg-font-size-base: 15px;
-  --pg-line-height: 1.55;
+  /* Paper */
+  --sand-100: #f4eee4;
+  --sand-200: #eae2d4;
+  --sand-300: #ddd2c0;
+  --sand-ink: #1a1c20;
+  --sand-muted: #585754;
+
+  /* Accent */
+  --sunrise-400: #f6ad66;
+  --sunrise-500: #f0913a;
+  --sunrise-600: #c96a22;
+  --sunrise-ink: #1b0f04;
+
+  /* Finding vocabulary */
+  --clear: #7fb08a;
+  --common: #8ea3c2;
+  --review: #e3a53e;
+  --strong: #e8674d;
+  --clear-wash: rgba(127, 176, 138, 0.12);
+  --common-wash: rgba(142, 163, 194, 0.12);
+  --review-wash: rgba(227, 165, 62, 0.13);
+  --strong-wash: rgba(232, 103, 77, 0.14);
+  --match-line: rgba(240, 145, 58, 0.085);
+  --match-line-edge: rgba(240, 145, 58, 0.75);
+
+  /* Lines */
+  --line: rgba(238, 235, 236, 0.1);
+  --line-strong: rgba(238, 235, 236, 0.2);
+  --line-sand: rgba(26, 28, 32, 0.14);
+  --line-sand-strong: rgba(26, 28, 32, 0.28);
+
+  /* Type */
+  --font-display: "Newsreader Display", "Newsreader Fallback", Georgia, "Times New Roman", serif;
+  --font-sans: "Public Sans Variable", "Public Sans Fallback", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  --font-hand: "Caveat Notes", "Segoe Print", "Bradley Hand", cursive;
+
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: clamp(2rem, 1.5rem + 2vw, 2.75rem);
+  --text-4xl: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);
+  --text-hero: clamp(2.75rem, 0.9rem + 8.8vw, 9.25rem);
+
+  --leading-tight: 1.02;
+  --leading-snug: 1.2;
+  --leading-body: 1.6;
+
+  /* Space — 4px base */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+  --space-10: 8rem;
+  --section: clamp(5rem, 3rem + 9vw, 11rem);
+
+  /* Shape */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
 
   /* Motion */
-  --pg-ease-mechanical: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --pg-duration-fast: 90ms;
-  --pg-duration-base: 180ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-1: 140ms;
+  --dur-2: 240ms;
+  --dur-3: 700ms;
 
   /* Layout */
-  --pg-gutter: 24px;
-  --pg-max-width: 1320px;
+  --shell: 1240px;
+  --shell-narrow: 760px;
+  --gutter: clamp(1rem, 0.5rem + 3vw, 2.5rem);
+  --header-h: 68px;
 }
-
-@media (max-width: 640px) {
-  :root {
-    --pg-gutter: 16px;
-  }
-}
-
-/* PoryGen is a fixed dark instrument panel by design (see docs/ARCHITECTURE.md
-   design-brief notes) — it does not offer a light theme. */

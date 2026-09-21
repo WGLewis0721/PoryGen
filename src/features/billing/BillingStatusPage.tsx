@@ -1,93 +1,175 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { useAuth } from "../../features/auth/AuthContext";
-import { getBillingCustomer, listBillingEvents, createCheckoutSession } from "../../lib/api";
-import type { BillingCustomerRow, BillingEventRow } from "../../lib/dbTypes";
+import { Link, useSearchParams } from "react-router-dom";
+import { Check } from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
+import { useDocumentTitle } from "../../components/useDocumentTitle";
+import { countScansSince, createCheckoutSession, listBillingEvents, listRepositories } from "../../lib/api";
+import type { BillingEventRow } from "../../lib/dbTypes";
+import { derivePlan, startOfMonth, usageReadout, type PlanState, type UsageReadout } from "../../lib/entitlements";
+import { PLANS, planById, type PlanId } from "../../config/plans";
+import { PAID_CHECKOUT_ENABLED } from "../../config/site";
+import { formatDateTime } from "../../lib/format";
 
 export function BillingStatusPage() {
+  useDocumentTitle("Plan and billing — PoryGen");
   const { user } = useAuth();
-  const [customer, setCustomer] = useState<BillingCustomerRow | null>(null);
+  const [params] = useSearchParams();
+  const highlighted = params.get("plan") as PlanId | null;
   const [events, setEvents] = useState<BillingEventRow[]>([]);
+  const [planState, setPlanState] = useState<PlanState | null>(null);
+  const [usage, setUsage] = useState<UsageReadout | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkingOut, setCheckingOut] = useState<PlanId | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    getBillingCustomer(user.id).then(setCustomer);
-    listBillingEvents(user.id).then(setEvents);
+    let cancelled = false;
+    Promise.all([listBillingEvents(user.id), countScansSince(user.id, startOfMonth()), listRepositories()])
+      .then(([rows, scans, repos]) => {
+        if (cancelled) return;
+        const state = derivePlan(rows);
+        setEvents(rows);
+        setPlanState(state);
+        setUsage(usageReadout(state.plan, scans, repos.filter((r) => !r.is_demo).length));
+      })
+      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : "Could not load billing."));
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  const paid = events.some((e) => e.event_type === "checkout.session.completed");
-
-  async function upgrade() {
-    setCheckingOut(true);
+  async function upgrade(plan: "pro" | "team") {
+    setCheckingOut(plan);
     setError(null);
-    const result = await createCheckoutSession();
-    setCheckingOut(false);
+    const result = await createCheckoutSession(plan);
     if ("error" in result) {
       setError(result.error);
+      setCheckingOut(null);
       return;
     }
-    window.location.href = result.url;
+    window.location.assign(result.url);
   }
+
+  const current = planState?.plan ?? "free";
+  const customerEvents = events.filter((e) => (e.payload_summary_json as Record<string, unknown> | null)?.porygen_plan !== "apex_dogfood");
 
   return (
     <div>
-      <div className="pg-page-header">
+      <header className="page-head">
         <div>
-          <h1>Billing</h1>
-          <p>Plan status backed by verified Stripe webhook events — reaching a success URL is never treated as proof of payment.</p>
+          <h1>Plan and billing</h1>
+          <p>
+            Your plan changes only when Stripe confirms a payment through a verified webhook. Reaching a success page is never
+            treated as proof of payment.
+          </p>
         </div>
-        <div className="pg-page-actions">
-          <Link to="/billing/diagnostics" className="pg-btn pg-btn-ghost">diagnostics</Link>
-        </div>
-      </div>
+      </header>
 
-      <div className="pg-panel" style={{ padding: 24, marginBottom: 32 }}>
-        <div className="pg-kv-key">Current plan</div>
-        <div style={{ fontSize: "1.3rem", fontWeight: 800, marginTop: 6 }}>
-          {paid ? "Pro Daemon" : "Community Scanner"}
-        </div>
-        {!paid && (
-          <button type="button" className="pg-btn pg-btn-primary" style={{ marginTop: 16 }} onClick={upgrade} disabled={checkingOut}>
-            {checkingOut ? "starting checkout…" : "Upgrade to Pro"}
-          </button>
-        )}
-        {error && <div className="pg-form-error" style={{ marginTop: 16 }}>{error}</div>}
-      </div>
-
-      <h2 className="pg-section-title">Stripe linkage</h2>
-      <div className="pg-kv-grid" style={{ marginBottom: 32 }}>
-        <div className="pg-kv-cell">
-          <div className="pg-kv-key">Stripe customer</div>
-          <div className="pg-kv-value">{customer?.stripe_customer_id ?? "not created yet"}</div>
-        </div>
-        <div className="pg-kv-cell">
-          <div className="pg-kv-key">APEX customer ID</div>
-          <div className="pg-kv-value">{customer?.apex_customer_id ?? "not configured"}</div>
-        </div>
-      </div>
-
-      <h2 className="pg-section-title">Webhook event history</h2>
-      {events.length === 0 ? (
-        <p style={{ color: "var(--pg-structure-dim)", fontSize: "0.85rem" }}>No billing events received yet.</p>
-      ) : (
-        <table className="pg-table">
-          <thead>
-            <tr><th>Type</th><th>Received</th><th>Session</th><th>Price</th></tr>
-          </thead>
-          <tbody>
-            {events.map((e) => (
-              <tr key={e.id}>
-                <td>{e.event_type}</td>
-                <td>{new Date(e.received_at).toLocaleString()}</td>
-                <td>{e.checkout_session_id?.slice(0, 16) ?? "—"}</td>
-                <td>{e.price_id ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {error && (
+        <p className="notice notice-error block-notice" role="alert">
+          {error}
+        </p>
       )}
+
+      <section aria-labelledby="plan-current">
+        <h2 id="plan-current" className="block-title">
+          Current plan
+        </h2>
+        <div className="kv block-gap">
+          <div className="kv-cell">
+            <div className="kv-key">Plan</div>
+            <div className="kv-value">{planById(current).name}</div>
+          </div>
+          <div className="kv-cell">
+            <div className="kv-key">Scans this month</div>
+            <div className="kv-value">{usage ? `${usage.scansThisMonth} of ${usage.scansIncluded}` : "—"}</div>
+          </div>
+          <div className="kv-cell">
+            <div className="kv-key">Repositories</div>
+            <div className="kv-value">{usage ? `${usage.repositories} of ${usage.repositoriesIncluded}` : "—"}</div>
+          </div>
+        </div>
+        <p className="fine block-gap">
+          Early access: plan limits are shown here but not enforced yet, and the resolution workflow is available on every plan.
+          {usage && (usage.overScans || usage.overRepositories) ? " You're past your plan's included usage — nothing is blocked." : ""}
+        </p>
+      </section>
+
+      <section className="block" aria-labelledby="plan-options">
+        <h2 id="plan-options" className="block-title">
+          Plans
+        </h2>
+        {!PAID_CHECKOUT_ENABLED && (
+          <p className="notice block-gap">Paid checkout isn't open yet. You can use PoryGen on Free in the meantime.</p>
+        )}
+        <ul className="rows block-gap">
+          {PLANS.map((plan) => {
+            const isCurrent = plan.id === current;
+            return (
+              <li className={`row${highlighted === plan.id ? " row-highlight" : ""}`} key={plan.id}>
+                <span className="plan-row-name">
+                  {plan.name} <span className="muted">{plan.priceLabel} {plan.cadence}</span>
+                </span>
+                <div className="row-main">
+                  <span className="row-meta">{plan.summary}</span>
+                </div>
+                <div className="row-side">
+                  {isCurrent ? (
+                    <span className="tag tag-clear">
+                      <Check aria-hidden="true" /> Current
+                    </span>
+                  ) : plan.id === "free" ? null : (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => upgrade(plan.id as "pro" | "team")}
+                      disabled={!PAID_CHECKOUT_ENABLED || checkingOut !== null}
+                    >
+                      {checkingOut === plan.id ? "Opening checkout…" : PAID_CHECKOUT_ENABLED ? `Choose ${plan.name}` : "Checkout opens soon"}
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="fine block-gap">
+          <Link to="/pricing">Compare plans in full</Link>
+        </p>
+      </section>
+
+      <section className="block" aria-labelledby="plan-payments">
+        <h2 id="plan-payments" className="block-title">
+          Payment records
+        </h2>
+        {customerEvents.length === 0 ? (
+          <p className="muted block-gap">No payments yet.</p>
+        ) : (
+          <div className="table-wrap block-gap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Event</th>
+                  <th scope="col">Received</th>
+                  <th scope="col">Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerEvents.map((e) => (
+                  <tr key={e.id}>
+                    <td>{e.event_type}</td>
+                    <td>{formatDateTime(e.received_at)}</td>
+                    <td>{String((e.payload_summary_json as Record<string, unknown> | null)?.porygen_plan ?? "—")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="fine block-gap">
+          Operators: <Link to="/billing/diagnostics">billing diagnostics</Link>.
+        </p>
+      </section>
     </div>
   );
 }

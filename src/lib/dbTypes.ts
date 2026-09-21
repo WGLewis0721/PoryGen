@@ -39,6 +39,22 @@ export type ScanStatus =
 
 export type RiskLevel = "clear" | "review" | "blocking" | "unknown";
 
+export interface ProviderCoverageJson {
+  providerId: string;
+  providerName: string;
+  corpusName: string;
+  corpusVersion: string;
+  scope: string;
+  entryCount: number;
+  languages: string[];
+  claim: string;
+  limitations: string[];
+}
+
+/**
+ * summary_json. Fields after `sbom` were added by pipeline 2026.09 and are
+ * absent on older scans, so every reader must treat them as optional.
+ */
 export interface ScanSummaryJson {
   languages: string[];
   referenceFingerprintsChecked: number;
@@ -55,6 +71,15 @@ export interface ScanSummaryJson {
   };
   repoContentHash?: string;
   sbom?: unknown;
+  pipelineVersion?: string;
+  normalizer?: string;
+  coverage?: ProviderCoverageJson[];
+  providersRun?: string[];
+  checkedPaths?: string[];
+  ingestedPaths?: string[];
+  manifestsChecked?: string[];
+  findingsTruncated?: boolean;
+  similarity?: { clear: number; commonPattern: number; reviewSuggested: number; strongMatch: number };
 }
 
 export interface ScanRow {
@@ -88,6 +113,61 @@ export interface ScanFindingRow {
   confidence: number | null;
   evidence_json: Record<string, unknown>;
   remediation: string | null;
+  created_at: string;
+  /** Stable identity across scans; null on rows written before the resolution-history migration. */
+  finding_key?: string | null;
+}
+
+export type TrackedStatus = "open" | "in_review" | "resolved" | "accepted_risk" | "dismissed_false_positive";
+export type SimilarityBand = "common_pattern" | "review_suggested" | "strong_match";
+
+export interface TrackedFindingRow {
+  id: string;
+  repository_id: string;
+  owner_id: string;
+  finding_key: string;
+  type: FindingType;
+  provider_id: string | null;
+  title: string;
+  file_path: string | null;
+  severity: FindingSeverity;
+  band: SimilarityBand | null;
+  status: TrackedStatus;
+  remediation_pending: boolean;
+  first_scan_id: string | null;
+  last_seen_scan_id: string | null;
+  latest_finding_id: string | null;
+  resolved_scan_id: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ResolutionAction =
+  | "detected"
+  | "review_started"
+  | "remediation_recorded"
+  | "rescan_still_detected"
+  | "rescan_clean"
+  | "reopened"
+  | "accepted_risk"
+  | "dismissed_false_positive"
+  | "note";
+
+export interface FindingResolutionRow {
+  id: string;
+  tracked_finding_id: string;
+  repository_id: string;
+  owner_id: string;
+  actor_kind: "user" | "system";
+  actor_id: string | null;
+  action: ResolutionAction;
+  from_status: TrackedStatus | null;
+  to_status: TrackedStatus;
+  note: string | null;
+  scan_id: string | null;
+  rescan_scan_id: string | null;
+  revision: string | null;
   created_at: string;
 }
 
