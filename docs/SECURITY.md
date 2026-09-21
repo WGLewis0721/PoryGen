@@ -2,81 +2,83 @@
 
 ## Row Level Security
 
-Every table has RLS enabled (`supabase/migrations/20260921000200_row_level_security.sql`,
-hardened by `20260921000400_scan_findings_insert_policy.sql` after a live test caught a
-missing policy — see below). Pattern: `auth.uid() = owner_id`, with an explicit `OR
-is_demo = true` exception on `repositories`/`scans`/`provenance_events` so the seeded
-Lattice project is publicly readable without weakening any real user's data. Billing
-tables (`billing_customers`, `billing_events`) have **no client-facing write policy at
-all** — those rows are written only by Edge Functions using the service-role key.
+Every table has RLS enabled. Pattern: `auth.uid() = owner_id`, with an explicit `OR is_demo =
+true` read exception for the seeded Lattice sample so it's viewable without an account.
 
-Verified with the Supabase security advisor: the `handle_new_user()` trigger function
-was flagged as callable via PostgREST RPC by `anon`/`authenticated` roles despite being
-`SECURITY DEFINER` — fixed by revoking `EXECUTE` from those roles (it now only runs as
-the `auth.users` insert trigger). Advisor reported clean after the fix.
+- `repositories`, `scans`, `scan_findings`, `provenance_events` — unchanged policies (owner
+  read/write; demo read).
+- `tracked_findings`, `finding_resolutions` (new) — **select only** (own or demo). There are no
+  client insert, update, or delete policies. Status changes go through
+  `record_finding_action()`; scan reconciliation goes through `sync_tracked_findings()`.
+- `billing_customers`, `billing_events` — owner read only; written by Edge Functions with the
+  service role.
 
-**A real bug this caught**: `scan-repository` writes findings using the *caller's own
-JWT*, not a service role, so RLS applies to those inserts too. The initial migration only
-had a SELECT policy on `scan_findings` — a live scan against `expressjs/cors` failed with
-`new row violates row-level security policy for table "scan_findings"` until the missing
-INSERT policy was added. Left as a documented example of RLS needing to cover every
-write path a real caller uses, not just the ones exercised by manual testing.
+`supabase/tests/resolution.test.ts` runs all migrations against PGlite with Supabase-shaped
+roles and verifies: cross-account reads are blocked, anonymous visitors see only the demo
+repository, direct client writes to tracked findings and history fail, history can't be updated
+even by the service role, only the service role can reconcile scans, transitions and reasons are
+enforced, demo findings can't be acted on by other accounts, and the pre-existing scan/finding
+policies still hold.
+
+## Integrity of resolution history
+
+- A person can never mark a finding resolved. Only a scan can, through
+  `sync_tracked_findings`, which requires proof the finding was re-checked (see
+  [SCANNER.md](SCANNER.md#resolution-contract)).
+- `sync_tracked_findings` is executable by `service_role` only; `scan-repository` calls it with
+  the service-role key after its own pipeline run.
+- `finding_resolutions` is append-only (trigger), so decisions and their reasons can't be edited
+  after the fact.
+- Both functions are `security definer` with `search_path = ''` and fully-qualified names;
+  `EXECUTE` is revoked from `public` and granted narrowly.
+
+**Known limit (pre-existing design):** scans and scan findings are written with the caller's
+JWT under RLS, so an account can write its own scan rows directly. Reconciliation only runs on
+scans the Edge Function produced, which limits the impact, but diligence-grade evidence would
+move scan writes to the service role inside the Edge Function and remove the client insert and
+update policies on `scans` / `scan_findings`. That is a deliberate follow-up, not done here,
+because it must ship together with the redeployed function.
 
 ## Server-side secrets
 
-`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `APEX_CUSTOMER_ID`,
-`GITHUB_TOKEN`, and the Supabase service-role key are Edge Function secrets only —
-never bundled into the Vite build, never read by client code. `billing-diagnostics`
-returns only non-secret derived values (booleans, a Price ID, a Stripe account ID fetched
-live) and is unit-testable against exactly that contract.
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`,
+`STRIPE_PRICE_TEAM_MONTHLY`, `STRIPE_APEX_DOGFOOD_PRICE_ID` (legacy `STRIPE_PRO_PRICE_ID`),
+`APEX_CUSTOMER_ID`, `GITHUB_TOKEN`, and the service-role key are Edge Function secrets only.
+Browser-visible configuration is limited to `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SALES_EMAIL`, and `VITE_BILLING_CHECKOUT_ENABLED`.
+`billing-diagnostics` returns only non-secret values (booleans, Price IDs, the Stripe account ID).
 
-## Webhook signature verification
+## Webhook verification
 
-`stripe-webhook` verifies `Stripe-Signature` against the raw request body (never the
-parsed JSON, which wouldn't match) using HMAC-SHA256 and a constant-time comparison —
-see [STRIPE_SETUP.md](STRIPE_SETUP.md).
+`stripe-webhook` verifies `Stripe-Signature` (HMAC-SHA256 over `${timestamp}.${rawBody}`,
+constant-time comparison) against the raw body, and treats a duplicate `stripe_event_id` as an
+idempotent success. Plan state is derived from those verified rows only; reaching
+`/billing/success` is never treated as payment.
 
-## Boundary validation / SSRF protection
+## Ingestion boundary (SSRF)
 
-`supabase/functions/scan-repository/github.ts` accepts only
-`https://github.com/<owner>/<repo>` or an `owner/repo` shorthand; owner/repo are
-regex-validated (`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`) before any network call. Every
-subsequent fetch targets a **hardcoded** host (`api.github.com`,
-`raw.githubusercontent.com`) built from that validated owner/repo — never a URL
-constructed from unsanitized user input. Rejected explicitly: non-`https` schemes,
-non-`github.com` hosts, userinfo (`user:pass@`) tricks, and malformed paths.
+`supabase/functions/scan-repository/github.ts` accepts only `https://github.com/<owner>/<repo>`
+or `owner/repo`; owner and repo are regex-validated before any request, and every fetch targets
+a hardcoded host (`api.github.com`, `raw.githubusercontent.com`). Non-https schemes, other
+hosts, and userinfo tricks are rejected. Registry lookups use fixed hosts with a 3-second
+timeout.
 
-License-registry lookups (`registry.npmjs.org`, `pypi.org`) are similarly fixed-host,
-with a 3-second timeout and graceful fallback to `Unknown` on any failure.
+## Limits and execution
 
-## Repository/file limits
+40 files, 200 KB per file, 2 MB per scan; dependency, build, and vendor directories skipped;
+text extensions only. The scanner reads text and hashes tokens — no `eval`, no dynamic import,
+no shell execution, no builds.
 
-40 files, 200 KB per file, 2 MB total per scan; `node_modules`, `dist`, `build`, `vendor`,
-`.git`, `.next`, `target`, `out`, `coverage`, `.venv`/`venv`, `__pycache__`, `.cache` are
-skipped; only a fixed allowlist of text-source extensions is fetched.
+## Data retention
 
-## No code execution
+PoryGen stores scan metadata, findings, and — for flagged files only — an excerpt of the matched
+region (at most 40 lines / 4,000 characters) so the side-by-side view works. It does not store
+the contents of files that weren't flagged, does not train models on customer code, and does not
+send code to third-party AI services. Deleting a repository cascades to its scans, findings, and
+resolution history. This is stated publicly on `/security`.
 
-The scanner only ever reads file text and tokenizes/hashes it. No `eval`, no dynamic
-`require`/`import` of scanned content, no shell execution derived from repository
-contents, anywhere in the pipeline.
+## The public demo
 
-## Secrets in the browser
-
-No `localStorage` secrets beyond the Supabase session (managed by `supabase-js` itself)
-and the demo entitlement counter (`src/lib/entitlements.ts` — display-only, not a
-security boundary; real authorization is Postgres RLS). No raw Stripe payloads are ever
-persisted — `billing_events.payload_summary_json` is an explicitly-constructed subset of
-non-sensitive fields.
-
-## Ownership checks
-
-Every Supabase query in `src/lib/api.ts` is written against tables whose RLS policies
-already enforce ownership — there's no code path that trusts a client-supplied user ID
-over `auth.uid()`.
-
-## Idempotency
-
-`billing_events.stripe_event_id` is `UNIQUE`; `stripe-webhook` treats the resulting
-`23505` as `{"received": true, "idempotent": true}`, not an error — a replayed webhook
-never double-processes.
+`/demo` runs entirely in the browser on fictional data; it makes no network requests for scan
+data and writes nothing. The fictional "public source" lives under `git.example.org` (an RFC 2606
+reserved domain), so it can't be mistaken for, or collide with, a real project.

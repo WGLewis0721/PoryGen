@@ -1,128 +1,121 @@
 # PoryGen
 
-**Own your code. Prove your provenance.**
+**Move fast. Keep it yours.**
 
-🔗 **Live**: [porygen.william-glewis17.workers.dev](https://porygen.william-glewis17.workers.dev)
+PoryGen checks the code AI agents put into your product so you can catch suspicious source
+similarity and license risk before you ship someone else's code as your own.
 
-PoryGen records how software was created, identifies risky code ancestry, and turns
-AI-assisted development into an auditable evidence trail. It is a provenance-evidence
-platform, not a legal certification authority — see [claim boundaries](#claim-boundaries).
+> If AI coding becomes normal, checking what the AI gave you should become normal too.
 
-## What's real vs. simulated
+🔗 **Live**: [porygen.william-glewis17.workers.dev](https://porygen.william-glewis17.workers.dev) ·
+**Sample demo (no account)**: `/demo`
+
+## The loop
+
+```
+AI agent adds code
+  → PoryGen checks the new or changed code
+  → each file is clear, a common pattern, review suggested, or a strong source match
+  → you see the possible source, the evidence, and the license that comes with it
+  → you review, replace or rewrite, dismiss a false positive, or accept the risk with a reason
+  → PoryGen rescans
+  → the finding resolves on a clean rescan (or stays open)
+  → every step is kept as resolution history
+```
+
+The everyday value is another set of eyes on what your AI gave you. The long-term side effect
+is a record of what was checked, flagged, fixed, and confirmed — useful later, never the pitch.
+
+PoryGen is vendor-independent (it checks the repository, not the agent), Git-centered, and
+built for remediation rather than a one-off report. It did **not** invent fingerprinting, SCA,
+SBOMs, or attribution; its contribution is the join — see [how it fits](docs/ARCHITECTURE.md#where-porygen-fits).
+
+## What's real, what's sample data, what isn't built
 
 | Surface | Status |
 |---|---|
-| Marketing site (landing, product, pricing, enterprise, docs) | Real |
-| Auth (sign up, sign in, session persistence, sign out) | Real — Supabase Auth |
-| Repository feed + real GitHub scan | Real — `scan-repository` Edge Function, live-tested against `expressjs/cors`, `octocat/Hello-World` |
-| Scanner (tokenize → AST-normalize → winnow → fingerprint) | Real — Winnowing algorithm, tested; edge deployment uses a lexical normalizer (see [docs/SCANNER.md](docs/SCANNER.md)); a genuine tree-sitter reference path exists and is tested for Node contexts |
-| License scanner | Real — npm/PyPI registry lookups, SPDX policy mapping |
-| Findings, scan results, finding detail | Real, persisted to Postgres via RLS |
-| Provenance ledger + hash chain | Real hashing/verification; **Lattice** project's 26 events are seeded, deterministic fixtures — a fresh GitHub scan has no ledger yet until the VS Code extension captures edits |
-| Evidence export (JSON + print report) | Real |
-| Verified: Clear badge | Real generation, snapshot-based |
-| VS Code provenance capture extension | Real, compiles, tested classifier |
-| Stripe Checkout / webhook | Real code path; **not exercised end-to-end** — no sandbox `STRIPE_SECRET_KEY` was available in this build. See [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md) |
-| Sigstore attestation signing | Not implemented — explicit "local hash-chain attestation" fallback, adapter ready. See [docs/PROVENANCE.md](docs/PROVENANCE.md) |
-| Enterprise-tier infrastructure (large corpus, semantic clone, DOM review, private deployment) | Not built — labeled "Enterprise preview" everywhere it appears |
+| Marketing site (`/`, `/how-it-works`, `/pricing`, `/security`, `/docs`) | Real |
+| Public demo (`/demo`) | **Sample data, real engine.** A fictional repository and fictional "public source" run through the production scan pipeline in the browser. Labelled *Sample interactive demo* on screen. |
+| Auth (sign up, sign in, session, sign out) | Real — Supabase Auth |
+| Scanning public GitHub repositories | Real — `scan-repository` Edge Function (40 files / 200 KB each / 2 MB per scan) |
+| Scan pipeline (normalize → Winnowing → similarity providers → license context → findings) | Real — `packages/provenance-core/src/scanner/pipeline.ts`, shared by the Edge Function, the demo, the seed script, and tests |
+| Similarity coverage | **Limited and stated.** One provider today: PoryGen's bundled reference corpus (4 original reference implementations). Not GitHub, not package registries, not the internet. Every finding names its provider and coverage. |
+| License context | Real — npm registry / PyPI lookups, SPDX expressions, license-file detection |
+| Side-by-side match view with matched line ranges | Real (scans from pipeline 2026.09 onward store the matched excerpt; older findings show the reference source only) |
+| Resolution workflow (review, record a fix, dismiss, accept risk, reopen) | Real — `record_finding_action()` in Postgres, owner-checked, reasons required. **Requires migration `20260921000500`** |
+| Automatic resolution on rescan | Real — `sync_tracked_findings()`, service role only, resolves only what a scan provably re-checked |
+| Resolution history | Real, append-only (updates are blocked by trigger) |
+| Evidence export (JSON + print summary) | Real, now includes resolution history and coverage |
+| Editor attribution (VS Code extension, hash-chained ledger) | Real, optional — repositioned under History |
+| Continuous monitoring (every push / PR), private repos, GitHub checks, team access, policies | **Not built** — marked *In development* wherever they appear |
+| Paid plans (Pro $49/mo, Team $199/mo) | Checkout code is real and **fails closed** until `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_TEAM_MONTHLY` are configured |
+| Plan limits | Displayed, **not enforced** (early access) |
+| Diligence Pack, Enterprise / private deployment | On request / roadmap. No sales contact is configured yet (`VITE_SALES_EMAIL`, TODO: client to supply) |
+| APEX dogfood $19 one-time SKU | Real, **operator-only** (`/billing/diagnostics`). Never shown as customer pricing and never grants a plan. See [docs/APEX_DOGFOOD.md](docs/APEX_DOGFOOD.md) |
+| Sigstore signing | Not implemented — attestations are labelled "local hash-chain attestation" |
+
+## What PoryGen does not claim
+
+- **Not exhaustive.** A clear result means nothing matched the sources that scan compared against.
+- **Not proof of copying.** Similarity is evidence for a human to review.
+- **Not legal advice.** License context describes what a license family usually requires.
+- **Not a certification.** The resolution history is a record, not a guarantee of originality.
+- **Not an AI detector.** Editor attribution records edit shape (size, timing), never content, as a heuristic.
 
 ## Local setup
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY
+cp .env.example .env.local   # VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY
 npm run dev
 ```
 
+Without Supabase credentials the marketing site and the `/demo` walkthrough work fully; sign-in
+and the app show a clear "not configured" state.
+
 ```bash
-npm test    # vitest — scanner, provenance, classifier, all workspaces
-npm run build
+npm test         # vitest — scanner, pipeline, providers, resolution-history SQL (PGlite), seed, UI
+npm run build    # tsc -b && vite build
+npm run lint     # oxlint
 ```
+
+The database tests run every migration in `supabase/migrations/` against PGlite (real Postgres
+compiled to WASM) with Supabase-shaped roles and `auth.uid()`, so RLS policies and the
+resolution functions are exercised for real without touching a live project.
 
 ## Environment variables
 
-See [.env.example](.env.example). Frontend variables (`VITE_*`) are safe to expose — the
-publishable key is only ever as powerful as the RLS policies in `supabase/migrations`
-allow. Everything else (`STRIPE_*`, `APEX_CUSTOMER_ID`, `GITHUB_TOKEN`) is an Edge
-Function secret, set via `supabase secrets set`, never bundled into the browser build.
+See [.env.example](.env.example). `VITE_*` values are public by design (the publishable key is
+only as powerful as RLS allows). Everything else — Stripe keys and price IDs,
+`APEX_CUSTOMER_ID`, `GITHUB_TOKEN` — is an Edge Function secret set with `supabase secrets set`
+and never bundled.
 
-## Supabase setup
+## Deploying this change
 
-Migrations live in `supabase/migrations/` (schema, RLS policies). Edge Functions live in
-`supabase/functions/`. This build provisioned a live project and applied everything via
-the Supabase MCP tooling — for a fresh project:
+Order matters because the frontend degrades gracefully but the new Edge Functions expect the
+new schema:
 
 ```bash
-supabase link --project-ref <ref>
-supabase db push
+supabase db push                                   # applies 20260921000500_resolution_history.sql
+node scripts/sync-vendored-copies.mjs              # already run; re-run after touching provenance-core
 supabase functions deploy scan-repository create-checkout stripe-webhook billing-diagnostics
+npm run seed > scripts/lattice-seed.sql            # optional: refresh the public sample (already generated)
+# apply scripts/lattice-seed.sql with service-role access
+npm run build && node scripts/deploy-worker-assets.mjs
 ```
 
-`scan-repository`'s scanner logic is vendored from `packages/provenance-core` — run
-`node scripts/sync-vendored-copies.mjs` after touching scanner/provenance source before
-redeploying.
+Until the migration is applied, the app still scans and shows findings; resolution tracking
+shows an explicit "not enabled on this deployment yet" state instead of failing.
 
-## Stripe setup
+## Documentation
 
-See [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md).
-
-## Scanner support
-
-Tree-sitter grammars: JavaScript, TypeScript, Python (Node/test path). Lexical
-normalizer (edge deployment): the same three languages by extension, plus fallback
-tokenization for anything else. See [docs/SCANNER.md](docs/SCANNER.md) for the full
-pipeline, the Winnowing algorithm, and the reference-corpus boundary.
-
-## VS Code extension
-
-`packages/vscode-extension` — see its own [README](packages/vscode-extension/README.md).
-
-## Demo walkthrough
-
-See [docs/DEMO_FLOW.md](docs/DEMO_FLOW.md) for the scripted walkthrough of every
-acceptance scenario.
-
-## Deployment
-
-Frontend: deployed to **Cloudflare Workers static assets** (not Pages — the Cloudflare
-account had no existing GitHub-App authorization to connect Pages to this repo without an
-interactive dashboard step, and Workers' direct-upload asset API is fully documented for
-non-interactive deployment; functionally identical result, a public URL serving the Vite
-build with SPA fallback routing). Redeploy after any frontend change:
-
-```bash
-npm run build
-node scripts/deploy-worker-assets.mjs   # see script for the raw Cloudflare API calls
-```
-
-Backend: Supabase project (Postgres + Auth + Edge Functions), already provisioned for
-this build. No server process to deploy — Edge Functions run on Supabase's own runtime.
-
-## Known limitations
-
-- The `scan-repository` Edge Function uses a dependency-free lexical normalizer, not full
-  tree-sitter parsing, to avoid bundling multi-megabyte WASM grammars into a cold-start-
-  sensitive Deno function. See [docs/SCANNER.md](docs/SCANNER.md) for the honest boundary
-  and the tested tree-sitter reference implementation.
-- Provenance events only exist for repositories with VS Code-extension capture history
-  (or the seeded Lattice fixture) — a freshly-fed GitHub repository has an empty ledger.
-- Sigstore signing is not wired to a real OIDC credential in this environment; every
-  attestation is explicitly labeled "local hash-chain attestation" or "unsigned in-toto
-  statement," never claimed as signed.
-- Stripe Checkout/webhook code is real but untested end-to-end — no sandbox credentials
-  were available. See [docs/APEX_DOGFOOD.md](docs/APEX_DOGFOOD.md) for the next action
-  required to complete that path.
-- Enterprise-tier capabilities (large-corpus fingerprinting, semantic clone detection, UI/
-  DOM similarity, private deployment) are architecture only, visibly labeled
-  "Enterprise preview."
-
-## Claim boundaries
-
-PoryGen produces provenance **evidence**, not legal certification. An observed
-provenance composition is evidence about editing patterns, not a legal determination of
-copyright ownership. A structural-fingerprint match is evidence of code similarity
-against a *configured reference corpus*, not proof of infringement, and never a claim to
-have searched the entire internet. A license-policy finding identifies a likely
-obligation for review — it is not legal advice. "PoryGen Verified: Clear" means no
-blocking findings were detected under the selected policy at the recorded scan time; it
-is explicitly snapshot-based, never a perpetual certification.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system shape, scan path, provider seam, async-worker evolution
+- [docs/SCANNER.md](docs/SCANNER.md) — normalization, Winnowing, providers, bands, coverage, limits
+- [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — tables and the resolution-history model
+- [docs/SECURITY.md](docs/SECURITY.md) — RLS, ingestion boundary, secrets, retention
+- [docs/PROVENANCE.md](docs/PROVENANCE.md) — history, evidence export, optional editor attribution
+- [docs/DEMO_FLOW.md](docs/DEMO_FLOW.md) — public demo and authenticated walkthrough
+- [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md) — subscriptions, webhook, fail-closed behaviour
+- [docs/APEX_DOGFOOD.md](docs/APEX_DOGFOOD.md) — the separate operator test
+- [docs/OPUS_HANDOFF.md](docs/OPUS_HANDOFF.md) — state of this pass and what's next
+- [DESIGN.md](DESIGN.md) · [VISUAL-PLAN.md](VISUAL-PLAN.md) — visual system and imagery sources

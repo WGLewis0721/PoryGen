@@ -2,36 +2,44 @@
   "unit": {
     "runner": "vitest",
     "command": "npm test",
-    "lastResult": "53/53 passing",
+    "lastResult": "133/133 passing across 20 files",
     "coverage": [
       { "id": "lexical-normalize", "file": "packages/provenance-core/test/lexicalNormalize.test.ts", "status": "passing", "asserts": "rename/format invariance, keyword/punctuation preservation, language detection" },
       { "id": "tree-sitter-normalize", "file": "packages/provenance-core/test/treeSitterNormalize.test.ts", "status": "passing", "asserts": "real WASM parsing, rename invariance via genuine AST structure" },
-      { "id": "winnow", "file": "packages/provenance-core/test/winnow.test.ts", "status": "passing", "asserts": "k-gram hashing, window minimum selection, determinism, overlap computation" },
-      { "id": "corpus-match", "file": "packages/provenance-core/test/corpus.test.ts", "status": "passing", "asserts": "renamed copy of corpus entry flagged, unrelated code not flagged, license carried through" },
-      { "id": "license-scanner", "file": "packages/provenance-core/test/license.test.ts", "status": "passing", "asserts": "SPDX detection, policy mapping (CLEAR/REVIEW/BLOCKING/UNKNOWN), manifest parsing, malformed-JSON tolerance" },
-      { "id": "provenance-events", "file": "packages/provenance-core/test/events.test.ts", "status": "passing", "asserts": "hash chain linkage, tamper detection, in-toto statement shape, Postgres timestamp round-trip stability, optional-field presence stability" },
-      { "id": "classifier", "file": "packages/provenance-core/test/classifier.test.ts", "status": "passing", "asserts": "bulk-insert/human/imported/ambiguous classification, config overrides, composition summary" },
-      { "id": "vscode-classifier", "file": "packages/vscode-extension/test/classifier.test.ts", "status": "passing", "asserts": "same classifier behaviors, runnable without the VS Code API" }
+      { "id": "winnow", "file": "packages/provenance-core/test/winnow.test.ts", "status": "passing", "asserts": "k-gram hashing, window minimum selection, determinism, overlap" },
+      { "id": "corpus-match", "file": "packages/provenance-core/test/corpus.test.ts", "status": "passing", "asserts": "renamed copy flagged, unrelated code not flagged, license carried through" },
+      { "id": "similarity-and-providers", "file": "packages/provenance-core/test/similarity.test.ts", "status": "passing", "asserts": "bands and thresholds, line-range merging and mapping, reference-corpus provider coverage claim, fingerprint-index discovery, normalizer mismatch returns nothing" },
+      { "id": "scan-pipeline", "file": "packages/provenance-core/test/pipeline.test.ts", "status": "passing", "asserts": "phases in order, finding keys, bands, severities, excerpts, summary contract (checkedPaths, manifestsChecked, providersRun, truncation), clear repos, tree-sitter path through the provider seam" },
+      { "id": "license-scanner", "file": "packages/provenance-core/test/license.test.ts", "status": "passing", "asserts": "SPDX detection and policy, manifests, SPDX OR/AND expressions, -only/-or-later, npm license objects, PyPI classifiers, registry failure fallback" },
+      { "id": "provenance-events", "file": "packages/provenance-core/test/events.test.ts", "status": "passing", "asserts": "hash chain linkage, tamper detection, in-toto shape, Postgres round-trip stability" },
+      { "id": "classifier", "file": "packages/provenance-core/test/classifier.test.ts", "status": "passing", "asserts": "edit-shape classification and configuration" },
+      { "id": "vscode-classifier", "file": "packages/vscode-extension/test/classifier.test.ts", "status": "passing", "asserts": "same classifier behaviours without the VS Code API" },
+      { "id": "resolution-history-sql", "file": "supabase/tests/resolution.test.ts", "status": "passing", "asserts": "all migrations applied to PGlite; detection idempotence; owner/demo read scoping; client writes blocked; append-only history even for service role; reconciliation service-role only; transitions and reasons enforced; resolve after fix + clean rescan; reopen on regression; failed fix recorded; no resolution without re-check / on provider swap / truncated / legacy scans; deleted-file resolution; incomplete scans refused; pre-existing policies intact" },
+      { "id": "lattice-seed", "file": "supabase/tests/seed.test.ts", "status": "passing", "asserts": "seed applies and is idempotent, one tracked finding per outcome, pipeline evidence with excerpts, public demo readability, intact editor-attribution hash chain" },
+      { "id": "plans-config", "file": "src/config/plans.test.ts", "status": "passing", "asserts": "Free/$49/$199 plans and limits, no APEX SKU in customer pricing, subscription price variables, unbuilt features marked In development, Diligence Pack one-time" },
+      { "id": "plan-derivation", "file": "src/lib/entitlements.test.ts", "status": "passing", "asserts": "APEX and untagged purchases never grant a plan, subscription grant/cancel/switch, usage readout" },
+      { "id": "resolution-model", "file": "src/lib/resolution.test.ts", "status": "passing", "asserts": "allowed actions mirror SQL, people can't resolve, reasons required, stage derivation incl. reopen" },
+      { "id": "finding-vocabulary", "file": "src/lib/findingVocabulary.test.ts", "status": "passing", "asserts": "band labels never accuse, legacy fallback, license labels, attribution informational" },
+      { "id": "evidence-view", "file": "src/features/findings/evidence.test.ts", "status": "passing", "asserts": "pipeline evidence mapping, legacy rows recover reference source and honest coverage, dependency findings" },
+      { "id": "demo-engine", "file": "src/features/demo/sampleEngine.test.ts", "status": "passing", "asserts": "strong GPL match before, cleared after with a below-threshold score, homepage snapshot equals engine output, deterministic padding paths" },
+      { "id": "demo-walkthrough", "file": "src/features/demo/DemoPage.test.tsx", "status": "passing", "asserts": "sample labelling, full scan→finding→fix→rescan→resolved flow in jsdom, reason required for accepting risk" },
+      { "id": "marketing-content", "file": "src/features/marketing/marketing.test.tsx", "status": "passing", "asserts": "promise and CTAs, no exhaustive-coverage / AI-percentage / social-proof claims, sample labelling, pricing without the APEX SKU, fail-closed checkout copy" }
     ]
   },
   "manual_verification": {
-    "method": "live browser session against the deployed Supabase project (fxeuahfgwydwzflymsoy)",
+    "method": "rendered browser QA on the Vite dev server (desktop 1440, 390, and 320 widths) plus a scratch-only fixture API for authenticated screens",
     "scenarios": [
-      { "id": "scenario-a-public-product", "status": "verified", "notes": "landing/product/pricing/enterprise render; nav resolves" },
-      { "id": "scenario-b-account", "status": "verified", "notes": "sign-up, email-confirm-gated sign-in, session persists across load, sign-out" },
-      { "id": "scenario-c-repository", "status": "verified", "notes": "fed octocat/Hello-World and expressjs/cors; real GitHub ingestion, real npm license lookups, findings persisted and browsable" },
-      { "id": "scenario-c-rls-bug-found-and-fixed", "status": "verified", "notes": "missing scan_findings INSERT policy caught live, fixed, re-verified" },
-      { "id": "scenario-d-lattice-demo", "status": "verified", "notes": "seeded repository visible with DEMO badge, 4 findings match spec exactly" },
-      { "id": "scenario-e-provenance", "status": "verified", "notes": "chain showed 'verification failed' twice during development; both root causes fixed and re-verified as 'chain intact'" },
-      { "id": "scenario-f-evidence", "status": "verified", "notes": "JSON export and print report render; Verified:Clear badge panel appears for the expressjs/cors clear scan" },
-      { "id": "scenario-g-vscode", "status": "verified", "notes": "tsc compile clean; classifier tests pass" },
-      { "id": "scenario-h-billing", "status": "partial", "notes": "create-checkout verified to fail closed with STRIPE_NOT_CONFIGURED (no sandbox key in this environment); UI paths (billing status/diagnostics/success) render correctly against empty state" },
-      { "id": "scenario-i-apex-readiness", "status": "verified", "notes": "diagnostics correctly report APEX_CUSTOMER_ID and Stripe as not configured, no fabricated values" },
-      { "id": "scenario-j-quality", "status": "verified", "notes": "npm install / npm run build / npm test all clean; no dead nav found" }
+      { "id": "homepage", "status": "verified", "notes": "hero, all sections, no horizontal overflow at 320px, mobile menu" },
+      { "id": "demo", "status": "verified", "notes": "full guided loop, accept-risk with reason, try-fix-instead, resolved state; 320px layout" },
+      { "id": "pricing", "status": "verified", "notes": "plans from config, fail-closed copy, 320px" },
+      { "id": "app-screens", "status": "verified-with-fixtures", "notes": "dashboard, findings, finding page actions (review, record fix), scan, repositories, history, billing, diagnostics, settings rendered against fixture data; clean console" },
+      { "id": "live-supabase", "status": "not-run", "notes": "migration and functions not deployed from this branch; sign-in requires the owner's credentials" },
+      { "id": "stripe", "status": "not-run", "notes": "no sandbox credentials; fail-closed paths covered by code review and UI tests" }
     ]
   },
   "build": {
-    "typecheck": "tsc -b — 0 errors",
-    "bundler": "vite build — succeeds (main chunk 556KB, noted as a code-splitting opportunity, not an error)"
+    "typecheck": "tsc -b — 0 errors; Edge Functions type-checked with a Deno shim (strict)",
+    "bundler": "vite build — succeeds; routes code-split, entry chunk ~315 KB (100 KB gzip)",
+    "lint": "oxlint — 0 errors, 5 pre-existing warnings"
   }
 }

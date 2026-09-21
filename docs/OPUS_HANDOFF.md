@@ -1,59 +1,70 @@
-# Opus handoff
+# Handoff — 2026.09 course correction
 
-Non-blocking aesthetic/interaction refinement only. Everything below is explicitly
-optional — the product is complete and demoable without any of it. Each item below also
-exists as an inline `<!-- OPUS_TASK: ... -->` comment at its usage site.
+This pass moved PoryGen from "provenance platform" to **continuous source-risk protection for
+AI-assisted development**: detect → understand → fix → rescan → stay protected, with resolution
+history as a side effect. This file records what landed, what is deliberately unfinished, and the
+sharp edges.
 
-## 1. Bit-Critter gaze kinematics
+## What landed
 
-**Where**: `src/components/BitCritter.tsx` (comment above the `BitCritter` export).
+- **Positioning and site.** New editorial design system (Newsreader display serif, Public Sans,
+  graphite / deep slate / sunrise / sand), generated cinematic imagery (see VISUAL-PLAN.md),
+  homepage rebuilt in the brief's order, `/how-it-works`, `/security`, rewritten `/pricing` and
+  `/docs`. `/product` → `/how-it-works`, `/enterprise` → `/pricing#enterprise`, `/lattice` →
+  `/demo`. The Bit-Critter is now a small in-app status glyph only.
+- **Public demo** (`/demo`): fictional repository, real pipeline in the browser, the full loop in
+  about 90 seconds, no account.
+- **Scanner seams.** `SimilarityProvider` interface, `createStaticCorpusProvider`, the reference
+  corpus as a provider, a portable `runScanPipeline` shared by the Edge Function, demo, seed, and
+  tests (including a tree-sitter run), line-range evidence and bounded excerpts, bands, honest
+  per-finding coverage, better SPDX handling.
+- **Resolution history.** Migration `20260921000500`: `finding_key`, `tracked_findings`,
+  append-only `finding_resolutions`, `record_finding_action` (people) and
+  `sync_tracked_findings` (scanner, service role). Verified against real Postgres (PGlite) in
+  `supabase/tests/`.
+- **App.** Dashboard reframed around "Your codebase today"; new Findings queue; finding page
+  organised around the questions a founder asks, with the action panel; History replaces the
+  provenance ledger (editor attribution kept as a secondary view); evidence export includes
+  history and coverage.
+- **Billing.** Plans centralized in `src/config/plans.ts`; subscriptions (`pro`, `team`) fail
+  closed without Price IDs; the APEX $19 SKU is operator-only and tagged `apex_dogfood`; plan
+  state is derived from verified webhooks.
 
-**Current behavior**: the sensor lens (`.pg-critter-lens` / `.pg-critter-lens-glint`) is
-static aside from its autonomic blink animation.
+## Not deployed
 
-**Desired improvement**: pointer-following sensor/gaze movement and subtle head
-attitude, so the critter appears to track the cursor on the marketing hero.
+Nothing in this PR has been applied to the live Supabase project or redeployed. Order: `supabase
+db push` → deploy the four Edge Functions → optionally re-seed Lattice → build and deploy the
+frontend. The frontend degrades cleanly before the migration exists.
 
-**Constraints**: `requestAnimationFrame` + spring interpolation, not a raw
-`pointermove` → `transform` binding. Clamp apparent head rotation to ~±5°. Disable
-entirely under `prefers-reduced-motion: reduce` (checked via `matchMedia`, since this is
-JS-driven, not CSS-only). Must not regress keyboard or touch behavior — this is a
-pointer-only enhancement.
+## Deliberately unfinished (next, in priority order)
 
-## 2. Scanner physiological choreography
+1. **Continuous monitoring.** GitHub App (push / pull_request webhooks → queued scans), private
+   repositories, PR status checks. Architecture: [ARCHITECTURE.md](ARCHITECTURE.md#evolving-the-scanner).
+2. **Coverage.** A real second provider (licensed corpus or source-intelligence API). The UI and
+   resolution rules are already provider-aware.
+3. **Server-authoritative scan writes.** Move `scans` / `scan_findings` writes to the service
+   role inside `scan-repository` and drop the client insert/update policies (see SECURITY.md).
+4. **Async worker** on the Postgres queue, using the tree-sitter normalizer and a full checkout.
+5. **Plan enforcement** once paid checkout opens (limits are displayed only today).
+6. **Team features** (roles, shared policies, required-review rules) — advertised as In
+   development.
+7. **Sales contact.** Set `VITE_SALES_EMAIL` (TODO: client to supply); until then Enterprise and
+   Diligence Pack show "a sales contact is being set up".
 
-**Where**: `src/features/scanner/ScanPage.tsx` (documented in the component; not yet
-marked with an inline comment — add one if picking this up).
+## Sharp edges
 
-**Current behavior**: the Bit-Critter's state (`idle`/`ingesting`/`healthy`/`review`/
-`blocking`) is driven directly by `scan.status`/`scan.risk_level`, with CSS-only
-autonomic animation per state (breathing, blink, scanline sweep, glitch).
+- The reference corpus is four original implementations. Real scans will rarely match anything,
+  and a match means "resembles PoryGen's reference", which the UI states.
+- Legacy findings (before 2026.09) have no `finding_key`, so they aren't tracked; a rescan
+  creates tracked findings going forward.
+- `scan-repository` falls back to inserting findings without `finding_key` if the column is
+  missing, and skips reconciliation — so an out-of-order deploy degrades rather than fails.
+- The Lattice seed (`scripts/lattice-seed.sql`) now needs the resolution migration applied first.
 
-**Desired improvement**: richer physical behavior keyed to scan *microstates* (e.g. a
-distinct beat when `analyzing_licenses` finds something, a different rhythm for
-`fingerprinting` vs `indexing`) and terminal-output rhythm synchronized to it.
+## Optional polish (unchanged, low priority)
 
-**Constraints**: event-driven and deterministic — no random animation loops. Preserve
-reduced-motion behavior (already implemented for the existing states).
-
-## 3. Deterministic provenance telemetry player
-
-**Where**: `src/features/provenance/ProvenanceLedgerPage.tsx`.
-
-**Current behavior**: the ledger renders the full seeded event list statically, with
-source-type filtering.
-
-**Desired improvement**: a playback controller (play/pause/reset/1×/2×) over the seeded
-event timeline, synchronizing event-stream scroll position, attestation-panel
-highlighting, and Bit-Critter vital response to simulated "current time" as it advances
-through the real `event_timestamp` sequence.
-
-**Constraints**: deterministic timeline data (the real seeded events, already ordered),
-not random DOM mutation. Preserve reduced-motion behavior.
-
-## Explicitly not Opus's
-
-Per the scope contract this build followed: authentication, database tables, RLS,
-routing, Stripe, scanner architecture, API integration, the core provenance ledger, and
-error handling all belong to the Sonnet pass and are done. Nothing above touches any of
-those.
+- **Bit-Critter gaze kinematics** — `src/components/BitCritter.tsx` (inline `OPUS_TASK`
+  comment). Pointer-following gaze, rAF + spring, ±5°, disabled under reduced motion. The critter
+  is now secondary, so this matters less.
+- The scanner-choreography and provenance-player tasks from the previous handoff are retired:
+  the pages they targeted were replaced.

@@ -1,87 +1,73 @@
-# Provenance
+# History and evidence
 
-## Event taxonomy
+PoryGen's long-term value is a record of what was checked, flagged, fixed, and confirmed. It is
+a consequence of daily use, not the pitch, and the UI calls it **Resolution history**. Earlier
+builds led with provenance, AI-authorship percentages, and "chain of title"; those capabilities
+remain underneath, repositioned here.
 
-Canonical `source_type` (five buckets, per the data model): `human`, `ai`, `imported`,
-`generated`, `unknown`. Canonical `actor_type`: `developer`, `assistant`, `automation`,
-`external`.
+## Resolution history (primary)
 
-The VS Code extension's classifier produces a finer-grained `ClassifiedSignal` —
-`human_signal`, `bulk_insert_signal`, `ai_assisted_signal`, `human_modified_ai`,
-`imported`, `unknown` — which maps down to a canonical `source_type` for storage, with
-the original classifier signal preserved in `metadata_json.classifierSignal` so the
-finer distinction (e.g. "this human edit substantially reworked an earlier AI
-insertion") isn't lost.
+`tracked_findings` + `finding_resolutions` — see [DATA_MODEL.md](DATA_MODEL.md). Every finding
+worth a look carries an append-only history: detected → review started → fix recorded → clean
+rescan (resolved), or accepted risk / dismissed as a false positive with a required reason, or
+reopened when a resolved finding comes back. System steps are written only by scan
+reconciliation; people can't resolve findings themselves.
 
-## Classifier heuristics
+Surfaces: the finding page ("Did the fix pass?"), the dashboard's recent activity, `/history`,
+and the evidence export.
 
-`packages/provenance-core/src/provenance/classifier.ts`, `classifyEdit()`. Reads shape —
-size, speed, whether the change replaced existing text — never content:
+## Evidence export
 
-- **Bulk burst**: ≥8 lines inserted in one change, ≤400ms since the previous event in
-  that file → `ai_assisted_signal` (or `human_modified_ai` if it replaced existing text).
-- **Large first-shot paste**: ≥400 chars with no timing precedent → `imported`.
-- **Human cadence**: 1–40 chars, ≥150ms since the previous event → `human_signal` (or
-  `human_modified_ai` if it replaced existing text).
-- **Fast mid-size edit**: >40 chars, <150ms since the previous event → `ai_assisted_signal`
-  (lower confidence than a bulk burst).
+`/scans/:id/evidence` — a JSON download and a print summary containing the repository and scan
+identity, coverage (which providers and corpora the scan compared against), findings with their
+evidence, the repository's resolution history, the CycloneDX dependency inventory, and any
+editor-attribution events with their hash-chain state. It ends with the claim boundary below.
+The Diligence Pack is this export, frozen and assembled on request. The previous "PoryGen
+Verified: Clear" badge snippet was removed: it pointed at a badge service that doesn't exist and
+read like a certification.
+
+## Editor attribution (optional)
+
+The VS Code extension (`packages/vscode-extension`) records the **shape** of edits — size,
+timing, whether text was replaced — never content, and classifies each into a signal
+(`human_signal`, `bulk_insert_signal`, `ai_assisted_signal`, `human_modified_ai`, `imported`,
+`unknown`), stored as a canonical `source_type` with the original signal in `metadata_json`.
+PoryGen works without it; Git and scans are the universal path. It lives under
+History → Editor attribution and never appears as a headline "% AI" metric.
+
+### Classifier heuristics
+
+`packages/provenance-core/src/provenance/classifier.ts` (`classifyEdit()`), all thresholds
+configurable via `porygen.classifier.*`:
+
+- **Bulk burst** — ≥ 8 lines in one change, ≤ 400 ms after the previous event → `ai_assisted_signal`
+  (or `human_modified_ai` when it replaced text).
+- **Large first-shot paste** — ≥ 400 chars without timing precedent → `imported`.
+- **Human cadence** — 1–40 chars, ≥ 150 ms apart → `human_signal`.
+- **Fast mid-size edit** — > 40 chars, < 150 ms apart → `ai_assisted_signal` (lower confidence).
 - Anything else → `unknown`.
 
-All five thresholds are `ClassifierConfig` fields (`porygen.classifier.*` VS Code
-settings), never hidden constants. This is heuristic, not detection — see
-[Legal claim boundary](#legal-claim-boundary).
+### Hash chain
 
-## Hash chain
+`provenance/events.ts`: each event's hash commits to its canonical fields plus the previous hash
+(SHA-256 via Web Crypto). Optional fields default to `null` and timestamps are re-serialized
+before hashing, so verification survives a Postgres round-trip (both were real bugs, covered by
+tests). `verifyChain()` reports the first break. `buildInTotoStatement()` produces an
+`https://in-toto.io/Statement/v1`-shaped payload.
 
-`packages/provenance-core/src/provenance/events.ts`. Each event's `eventHash` commits to
-a **canonical, fully-normalized** shape of its own fields plus the previous event's hash
-(`canonicalEventShape` → `canonicalize` → SHA-256, via Web Crypto — one implementation,
-runs identically in the browser, Node, and Deno).
+### Sigstore boundary
 
-Two normalization rules exist specifically because this chain is verified after a
-database round-trip, not just at write time (both were real bugs, caught seeding the
-Lattice fixture, both covered by regression tests in `events.test.ts`):
+`provenance/sigstore.ts` — only `UnavailableSigstoreSigner` is wired (no OIDC credential).
+Attestations are labelled "local hash-chain attestation" / "unsigned in-toto statement" and never
+claimed as signed.
 
-1. **Optional-field presence.** A freshly-built `ProvenanceEventInput` literal may omit
-   `parentEventId`/`diffHash` entirely; a row read back from Postgres always has the
-   column, `null` or not. `canonicalEventShape` defaults every optional field to `null`
-   explicitly, so hashing is independent of which optional keys a given writer happened
-   to include.
-2. **Timestamp string format.** Postgres renders `timestamptz` as
-   `"2026-09-15 09:02:00+00"`; this library writes ISO-8601
-   (`"2026-09-15T09:02:00.000Z"`). Same instant, different string. `canonicalEventShape`
-   re-parses `eventTimestamp` through `new Date(...).toISOString()` before hashing, so
-   verification hashes the instant, not its spelling.
+## Claim boundary
 
-`verifyChain()` recomputes every hash and reports the first break — tamper-evident:
-editing or removing any past event changes every hash after it.
-
-## In-toto format
-
-`buildInTotoStatement()` produces an `https://in-toto.io/Statement/v1`-shaped payload:
-`subject` (repository name + content-hash digest), `predicateType`
-(`https://porygen.dev/attestation/v1`), and a `predicate` carrying the scan ID, policy
-version, chain-verification result, and first/last event hashes.
-
-## Sigstore boundary
-
-`packages/provenance-core/src/provenance/sigstore.ts`. `UnavailableSigstoreSigner` is the
-only signer wired up in this build — there is no OIDC identity token configured in this
-environment. Every attestation surfaced in the UI is labeled exactly what it is:
-**"local hash-chain attestation"** or **"unsigned in-toto statement."** The adapter
-(`SigstoreSigner` interface, `attestationStatusFor()`) is ready: swap in a real
-`sigstore`-npm-package-backed signer once genuine OIDC credentials exist, and every
-downstream reader already branches on `attestationStatusFor()` rather than assuming a
-signature exists.
-
-## Legal claim boundary
-
-- An observed provenance composition is evidence about editing patterns, **not** a legal
-  determination of copyright ownership or authorship.
-- A structural-fingerprint match is evidence of similarity against a configured
-  reference corpus, **not** proof of infringement.
-- The classifier's signals are heuristics about edit *shape* — size, speed, replacement —
-  **never** a claim to have detected AI-generated content from its content.
-- "Chain intact" means the stored hash chain recomputes cleanly — a tamper-evidence
-  check, **not** third-party cryptographic notarization (that's exactly what the Sigstore
-  boundary above is honest about not having, in this environment).
+- Similarity findings are evidence for review, not proof of copying or infringement.
+- Coverage is limited to the sources each scan compared against — today PoryGen's reference
+  corpus — never the entire internet.
+- License context describes what a license family usually requires; it isn't legal advice.
+- The resolution history records what was checked and decided; it doesn't certify originality.
+- Editor attribution is a heuristic about edit shape, not a determination of authorship.
+- "Hash chain intact" means the stored chain recomputes cleanly — tamper evidence, not
+  third-party notarization.
