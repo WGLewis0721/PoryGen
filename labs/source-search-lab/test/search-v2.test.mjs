@@ -142,6 +142,29 @@ test("mixed file can produce evidence from more than one public source", () => {
   assert.ok(findings.some((finding) => finding.publicSource?.path === "business.ts"));
 });
 
+
+test("fingerprints common across most indexed sources are softened to possible/common-pattern", () => {
+  const common = `
+export function clamp(value, low, high) {
+  if (value < low) {
+    return low;
+  }
+  if (value > high) {
+    return high;
+  }
+  return value;
+}
+`;
+  const commonIndex = buildReferenceIndex([
+    { id: "a", repository: "a/a", commit: "1", path: "a.js", language: "javascript", license: "MIT", sourceUrl: "https://a", source: common },
+    { id: "b", repository: "b/b", commit: "2", path: "b.js", language: "javascript", license: "MIT", sourceUrl: "https://b", source: common },
+    { id: "c", repository: "c/c", commit: "3", path: "c.js", language: "javascript", license: "MIT", sourceUrl: "https://c", source: common },
+  ]);
+  const { findings } = scanSourceFiles([{ path: "clamp.js", language: "javascript", source: common }], commonIndex);
+  assert.ok(findings.some((finding) => finding.classification === "possible_common_pattern"));
+  assert.equal(findings.some((finding) => finding.classification === "strong_match"), false);
+});
+
 test("source absent from index yields insufficient evidence", () => {
   const unrelated = `
 export function triangular(n) {
