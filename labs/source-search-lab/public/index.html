@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Source Search Lab</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page">
+    <section class="search-box">
+      <p class="eyebrow">PoryGen experiment</p>
+      <h1>Source Search Lab</h1>
+      <p class="intro">Searches 10 sources in this project first. If nothing matches, it asks the web for 5 results.</p>
+
+      <form id="search-form">
+        <label class="sr-only" for="query">Search</label>
+        <div class="search-row">
+          <input id="query" name="q" type="search" placeholder="Try: winnowing fingerprints" autocomplete="off" required>
+          <button type="submit">Search</button>
+        </div>
+      </form>
+
+      <p id="status" class="status" aria-live="polite">Ready.</p>
+    </section>
+
+    <section id="results" class="results" aria-label="Search results"></section>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
