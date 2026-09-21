@@ -1,0 +1,51 @@
+.pg-auth-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 64px 0;
+}
+
+.pg-auth-card {
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid var(--pg-divider);
+  background: var(--pg-base-raised);
+  padding: 32px;
+}
+
+.pg-auth-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.pg-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pg-auth-switch {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--pg-structure-dim);
+}
+.pg-auth-switch a {
+  color: var(--pg-accent);
+  text-decoration: none;
+}
+
+.pg-full-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 60vh;
+  color: var(--pg-structure-dim);
+  font-size: 0.85rem;
+}

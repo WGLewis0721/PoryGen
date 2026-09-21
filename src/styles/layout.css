@@ -1,0 +1,207 @@
+/* ---- marketing nav ------------------------------------------------------ */
+
+.pg-nav {
+  border-bottom: 1px solid var(--pg-divider);
+  position: sticky;
+  top: 0;
+  background: rgba(16, 18, 22, 0.92);
+  backdrop-filter: blur(6px);
+  z-index: 40;
+}
+
+.pg-nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  height: 64px;
+}
+
+.pg-nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  color: var(--pg-structure);
+}
+
+.pg-nav-links {
+  display: flex;
+  gap: 24px;
+  flex: 1;
+}
+
+.pg-nav-link {
+  color: var(--pg-structure-dim);
+  text-decoration: none;
+  font-size: 0.85rem;
+  padding: 6px 0;
+  border-bottom: 1px solid transparent;
+  transition: color var(--pg-duration-fast) var(--pg-ease-mechanical);
+}
+.pg-nav-link:hover, .pg-nav-link.active {
+  color: var(--pg-structure);
+}
+
+.pg-nav-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+@media (max-width: 780px) {
+  .pg-nav-links { display: none; }
+  .pg-nav-actions .pg-btn { padding: 10px 14px; font-size: 0.78rem; }
+}
+
+/* ---- footer -------------------------------------------------------------- */
+
+.pg-footer {
+  border-top: 1px solid var(--pg-divider);
+  margin-top: 96px;
+  padding-top: 56px;
+  padding-bottom: 24px;
+  background: var(--pg-base-sunken);
+}
+
+.pg-footer-inner {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 32px;
+  padding-bottom: 40px;
+}
+
+.pg-footer-brand {
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.pg-footer-tagline {
+  color: var(--pg-structure-dim);
+  font-size: 0.85rem;
+  margin-top: 8px;
+  max-width: 32ch;
+}
+
+.pg-footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pg-footer-col a {
+  color: var(--pg-structure-dim);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.pg-footer-col a:hover {
+  color: var(--pg-accent);
+}
+.pg-footer-note {
+  color: var(--pg-structure-faint);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+.pg-footer-note a {
+  color: var(--pg-structure-dim);
+}
+
+.pg-footer-copyright {
+  border-top: 1px solid var(--pg-divider);
+  padding-top: 20px;
+  color: var(--pg-structure-faint);
+  font-size: 0.75rem;
+}
+
+@media (max-width: 860px) {
+  .pg-footer-inner { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---- authenticated app shell ---------------------------------------------- */
+
+.pg-app-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+  flex: 1;
+}
+
+.pg-app-sidebar {
+  border-right: 1px solid var(--pg-divider);
+  background: var(--pg-base-sunken);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.pg-app-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+  font-weight: 800;
+  border-bottom: 1px solid var(--pg-divider);
+}
+
+.pg-app-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+  flex: 1;
+}
+
+.pg-app-nav-link {
+  padding: 12px 20px;
+  color: var(--pg-structure-dim);
+  text-decoration: none;
+  font-size: 0.85rem;
+  border-left: 2px solid transparent;
+  text-transform: lowercase;
+}
+.pg-app-nav-link:hover {
+  color: var(--pg-structure);
+  background: rgba(226, 228, 233, 0.04);
+}
+.pg-app-nav-link-active {
+  color: var(--pg-accent);
+  border-left-color: var(--pg-accent);
+  background: rgba(212, 255, 0, 0.06);
+}
+
+.pg-app-sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--pg-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pg-app-user {
+  font-size: 0.75rem;
+  color: var(--pg-structure-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pg-app-main {
+  padding: 32px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .pg-app-shell { grid-template-columns: 1fr; }
+  .pg-app-sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+  }
+  .pg-app-nav { flex-direction: row; }
+  .pg-app-sidebar-footer { display: none; }
+  .pg-app-main { padding: 20px 16px; }
+}

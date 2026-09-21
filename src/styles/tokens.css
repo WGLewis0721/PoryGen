@@ -1,0 +1,55 @@
+/*
+  PoryGen design tokens — Hardware Brutalism x Cybernetic Familiar.
+  ~60% deep slate / ~30% chalk silver structure / ~10% acid chartreuse.
+  border-radius is 0 everywhere except browser-native controls that refuse it.
+*/
+:root {
+  color-scheme: dark;
+
+  /* Core palette */
+  --pg-base: #101216;
+  --pg-base-raised: #16191f;
+  --pg-base-sunken: #0a0b0d;
+  --pg-structure: #e2e4e9;
+  --pg-structure-dim: #9a9fab;
+  --pg-structure-faint: #5c6270;
+  --pg-accent: #d4ff00;
+  --pg-accent-dim: #9bb800;
+  --pg-accent-ink: #0f1400;
+
+  /* Semantic states — subordinate to the primary system, used sparingly */
+  --pg-blocking: #ff3b30;
+  --pg-blocking-dim: #4a1410;
+  --pg-review: #ff9f1c;
+  --pg-review-dim: #4a3210;
+  --pg-info: #4fc3f7;
+  --pg-integrity-fail: #ff3b30;
+
+  /* Structural rules */
+  --pg-divider: rgba(226, 228, 233, 0.15);
+  --pg-divider-strong: rgba(226, 228, 233, 0.32);
+  --pg-radius: 0px;
+
+  /* Typography */
+  --pg-font-mono: "JetBrains Mono", "Space Mono", ui-monospace, "Cascadia Code", monospace;
+  --pg-font-size-base: 15px;
+  --pg-line-height: 1.55;
+
+  /* Motion */
+  --pg-ease-mechanical: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --pg-duration-fast: 90ms;
+  --pg-duration-base: 180ms;
+
+  /* Layout */
+  --pg-gutter: 24px;
+  --pg-max-width: 1320px;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --pg-gutter: 16px;
+  }
+}
+
+/* PoryGen is a fixed dark instrument panel by design (see docs/ARCHITECTURE.md
+   design-brief notes) — it does not offer a light theme. */

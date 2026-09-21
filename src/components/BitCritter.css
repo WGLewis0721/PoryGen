@@ -1,0 +1,157 @@
+/*
+  Bit-Critter — PoryGen's cybernetic familiar. Autonomic, not performative:
+  a resting device pulse, not a cartoon doing a dance. All motion is
+  CSS-driven and keyed off `data-state` / `data-size` on the root <svg>.
+*/
+
+.pg-bitcritter {
+  overflow: visible;
+}
+
+.pg-bitcritter .pg-critter-facet {
+  transition: fill var(--pg-duration-base) var(--pg-ease-mechanical);
+}
+
+.pg-bitcritter .pg-critter-vital {
+  fill: var(--pg-accent);
+  animation: pg-vital-pulse 2.6s var(--pg-ease-mechanical) infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.pg-bitcritter .pg-critter-lens {
+  fill: var(--pg-base-sunken);
+  stroke: var(--pg-accent);
+  stroke-width: 2;
+}
+
+.pg-bitcritter .pg-critter-lens-glint {
+  fill: var(--pg-accent);
+  animation: pg-blink 4.2s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.pg-bitcritter .pg-critter-body {
+  animation: pg-breathe 5.4s var(--pg-ease-mechanical) infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.pg-bitcritter .pg-critter-scanline {
+  opacity: 0;
+}
+
+.pg-bitcritter .pg-critter-fracture {
+  opacity: 0;
+  stroke: var(--pg-blocking);
+}
+
+/* ---- state: idle (default) --------------------------------------------- */
+
+/* ---- state: ingesting --------------------------------------------------- */
+.pg-bitcritter[data-state="ingesting"] .pg-critter-vital {
+  fill: var(--pg-accent);
+  animation-duration: 0.9s;
+}
+.pg-bitcritter[data-state="ingesting"] .pg-critter-scanline {
+  opacity: 1;
+  animation: pg-scan 1.4s linear infinite;
+}
+.pg-bitcritter[data-state="ingesting"] .pg-critter-lens-glint {
+  animation-duration: 1.1s;
+}
+
+/* ---- state: healthy ------------------------------------------------------ */
+.pg-bitcritter[data-state="healthy"] .pg-critter-vital {
+  fill: var(--pg-accent);
+  animation-duration: 3.2s;
+}
+
+/* ---- state: review -------------------------------------------------------- */
+.pg-bitcritter[data-state="review"] .pg-critter-vital {
+  fill: var(--pg-review);
+  animation: pg-vital-irregular 1.8s ease-in-out infinite;
+}
+.pg-bitcritter[data-state="review"] .pg-critter-lens {
+  stroke: var(--pg-review);
+}
+
+/* ---- state: blocking / contaminated --------------------------------------- */
+.pg-bitcritter[data-state="blocking"] .pg-critter-vital {
+  fill: var(--pg-blocking);
+  animation: pg-vital-pulse 0.5s var(--pg-ease-mechanical) infinite;
+}
+.pg-bitcritter[data-state="blocking"] .pg-critter-lens {
+  stroke: var(--pg-blocking);
+}
+.pg-bitcritter[data-state="blocking"] .pg-critter-body {
+  animation: pg-glitch 2.4s steps(1, end) infinite;
+}
+
+/* ---- state: integrity_warning ---------------------------------------------- */
+.pg-bitcritter[data-state="integrity_warning"] .pg-critter-vital {
+  fill: var(--pg-integrity-fail);
+  animation-duration: 2.2s;
+}
+.pg-bitcritter[data-state="integrity_warning"] .pg-critter-fracture {
+  opacity: 1;
+  animation: pg-fracture-throb 3s ease-in-out infinite;
+}
+
+@keyframes pg-vital-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes pg-vital-irregular {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  30% { opacity: 1; transform: scale(1.1); }
+  45% { opacity: 0.6; transform: scale(0.95); }
+  60% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes pg-blink {
+  0%, 92%, 100% { opacity: 0; }
+  95% { opacity: 1; }
+}
+
+@keyframes pg-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.015); }
+}
+
+@keyframes pg-scan {
+  0% { transform: translateY(-46px); }
+  100% { transform: translateY(46px); }
+}
+
+@keyframes pg-glitch {
+  0%, 82%, 100% { transform: translate(0, 0); }
+  84% { transform: translate(-2px, 1px); }
+  86% { transform: translate(2px, -1px); }
+  88% { transform: translate(-1px, 0); }
+  90% { transform: translate(0, 0); }
+}
+
+@keyframes pg-fracture-throb {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-bitcritter .pg-critter-vital,
+  .pg-bitcritter .pg-critter-body,
+  .pg-bitcritter .pg-critter-lens-glint,
+  .pg-bitcritter .pg-critter-scanline,
+  .pg-bitcritter .pg-critter-fracture {
+    animation: none !important;
+  }
+  .pg-bitcritter[data-state="ingesting"] .pg-critter-scanline {
+    opacity: 0.6;
+  }
+  .pg-bitcritter[data-state="blocking"] .pg-critter-vital,
+  .pg-bitcritter[data-state="integrity_warning"] .pg-critter-fracture {
+    opacity: 0.85;
+  }
+}

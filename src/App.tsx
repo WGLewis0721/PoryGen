@@ -1,122 +1,138 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./features/auth/AuthContext";
+import { ProtectedRoute } from "./features/auth/ProtectedRoute";
 
-function App() {
-  const [count, setCount] = useState(0)
+import { MarketingLayout } from "./features/marketing/MarketingLayout";
+import { LandingPage } from "./features/marketing/LandingPage";
+import { ProductPage } from "./features/marketing/ProductPage";
+import { PricingPage } from "./features/marketing/PricingPage";
+import { EnterprisePage } from "./features/marketing/EnterprisePage";
+import { DocsPage } from "./features/marketing/DocsPage";
+import { NotFoundPage } from "./features/marketing/NotFoundPage";
 
+import { SignInPage } from "./features/auth/SignInPage";
+import { SignUpPage } from "./features/auth/SignUpPage";
+
+import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { RepositoriesPage } from "./features/repositories/RepositoriesPage";
+import { NewScanPage } from "./features/repositories/NewScanPage";
+import { ScanPage } from "./features/scanner/ScanPage";
+import { FindingDetailPage } from "./features/findings/FindingDetailPage";
+import { ProvenanceLedgerPage } from "./features/provenance/ProvenanceLedgerPage";
+import { EvidenceBundlePage } from "./features/reports/EvidenceBundlePage";
+import { BillingStatusPage } from "./features/billing/BillingStatusPage";
+import { BillingDiagnosticsPage } from "./features/billing/BillingDiagnosticsPage";
+import { BillingSuccessPage } from "./features/billing/BillingSuccessPage";
+import { SettingsPage } from "./features/settings/SettingsPage";
+
+export default function App() {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route element={<MarketingLayout />}>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/product" element={<ProductPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/enterprise" element={<EnterprisePage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/sign-in" element={<SignInPage />} />
+            <Route path="/sign-up" element={<SignUpPage />} />
+            <Route path="/lattice" element={<Navigate to="/repositories" replace />} />
+          </Route>
 
-      <div className="ticks"></div>
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/repositories"
+            element={
+              <ProtectedRoute>
+                <RepositoriesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/repositories/new"
+            element={
+              <ProtectedRoute>
+                <NewScanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/scans/:scanId"
+            element={
+              <ProtectedRoute>
+                <ScanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/scans/:scanId/findings/:findingId"
+            element={
+              <ProtectedRoute>
+                <FindingDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/provenance"
+            element={
+              <ProtectedRoute>
+                <ProvenanceLedgerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/scans/:scanId/evidence"
+            element={
+              <ProtectedRoute>
+                <EvidenceBundlePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/billing"
+            element={
+              <ProtectedRoute>
+                <BillingStatusPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/billing/diagnostics"
+            element={
+              <ProtectedRoute>
+                <BillingDiagnosticsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/billing/success"
+            element={
+              <ProtectedRoute>
+                <BillingSuccessPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
-
-export default App
