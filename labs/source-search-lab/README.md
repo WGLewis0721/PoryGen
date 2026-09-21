@@ -7,17 +7,28 @@ It is **not production PoryGen code** and is not wired into the live product.
 ## What it does
 
 1. A user types a query into one search bar.
-2. The server tokenizes the query.
-3. It searches the 10 text sources in `public/sources/`.
-4. Local sources are ranked with a simple weighted word-count score:
+2. The browser sends the query in a POST body, not the URL.
+3. The server tokenizes the query.
+4. It searches the 10 text sources in `public/sources/`.
+5. Local sources are ranked with a simple weighted word-count score:
    - title matches = 5 points
    - tag matches = 3 points
    - body matches = 1 point
-   - results matching more of the query terms get a small coverage boost
-5. If at least one local source matches, the best local results are returned.
-6. If **nothing** in the local corpus matches, the server asks Brave Search for 5 web results.
+   - results matching more query terms get a small coverage boost
+6. If local sources match, the best local results are returned.
+7. If nothing matches, **private mode stops**. An external Brave Search fallback is retained only as an explicit public-demo opt-in and returns at most 5 results.
 
-This is intentionally the level of a CS undergrad/high-school search project: crawl/load → tokenize → index/search → rank → return results.
+This is intentionally a CS-undergrad/high-school-level project: load → tokenize → retrieve → rank → return results.
+
+## Privacy rule
+
+Private mode is the default.
+
+Search requests and responses use `Cache-Control: no-store`. Queries are not placed in URLs, not echoed in successful responses, and are not sent to the web provider unless the public-demo checkbox is explicitly enabled.
+
+For the production PoryGen direction, customer source code must never be sent to a public search engine. PoryGen should query its own public-code index with temporary in-memory fingerprints and retain no customer source or customer-derived fingerprints after the request.
+
+See [SECURITY.md](./SECURITY.md).
 
 ## Run
 
@@ -30,7 +41,7 @@ npm start
 
 Open: http://localhost:3000
 
-### Optional web fallback
+## Optional public-demo web fallback
 
 Set a Brave Search API key before starting:
 
@@ -39,15 +50,15 @@ export BRAVE_SEARCH_API_KEY="your-key"
 npm start
 ```
 
-The API key stays server-side. Never put it in `public/app.js`.
-
-Without the key, local search still works. A query with no local match will show a clear message that web fallback is not configured.
+Then explicitly check the public-demo web-fallback box in the UI. Do **not** use this mode with private source code.
 
 ## Test
 
 ```bash
 npm test
 ```
+
+The current suite covers ranking fundamentals plus privacy behavior such as POST-only search, `no-store`, blocked third-party fallback by default, query non-echo, and request-size limits.
 
 ## Why this exists
 
