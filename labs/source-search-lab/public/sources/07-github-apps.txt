@@ -1,0 +1,4 @@
+Title: GitHub Apps
+Tags: github, repositories, permissions, authentication
+
+A GitHub App can be installed on selected repositories and granted narrowly scoped permissions. A server can request short-lived installation tokens and use the GitHub API to read authorized repository contents without asking for a user's password.
