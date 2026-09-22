@@ -2,142 +2,195 @@
 
 ## Product shape
 
-PoryGen is continuous source-risk protection for AI-assisted development. The matcher is an
-engine; the product is the loop around it: **detect → understand → fix → rescan → stay
-protected**, with resolution history kept as a side effect. The architecture is arranged so
-the engine (and its source coverage) can improve or be replaced without changing that loop.
+PoryGen is source-risk protection for AI-assisted development.
 
-## System overview
+The live MVP is intentionally simple:
 
-```
-Browser (React 19 / Vite SPA, React Router)
-   │  supabase-js (publishable key; every query RLS-scoped)
-   ▼
-Supabase
-   ├─ Auth (email/password)
-   ├─ Postgres + RLS
-   │    profiles · repositories · scans · scan_findings
-   │    tracked_findings · finding_resolutions          ← resolution history
-   │    provenance_events                              ← optional editor attribution
-   │    billing_customers · billing_events
-   │    functions: record_finding_action (authenticated) · sync_tracked_findings (service role)
-   └─ Edge Functions (Deno)
-        scan-repository     — auth, GitHub ingestion, pipeline, persistence, reconciliation
-        create-checkout     — Stripe Checkout for pro | team | apex_dogfood
-        stripe-webhook      — verified, idempotent event ingestion
-        billing-diagnostics — non-secret configuration readout
+**public repo → Scan → evidence → action**
 
-External: api.github.com · raw.githubusercontent.com · registry.npmjs.org · pypi.org · Stripe
-```
+The matching engine is only one part of the product. The customer-facing loop is:
 
-## The scan path
+**detect → understand → review/dismiss → rescan → resolve**
+
+## Live MVP architecture
 
 ```
-scan request (UI → scan-repository)
-  → scan record (scans row, status advances per phase)
-  → source ingestion (github.ts: fixed hosts, validated owner/repo, size limits, tree listing)
-  → runScanPipeline (packages/provenance-core, runtime-agnostic)
-       normalize (lexical on the edge; tree-sitter in Node)
-       fingerprint (Winnowing)
-       candidate discovery + comparison through SimilarityProviders
-       license context (manifests, license files, npm/PyPI)
-       finding drafts with stable finding_keys, bands, excerpts, coverage
-  → findings persisted (scan_findings, as the caller — RLS applies)
-  → reconciliation (sync_tracked_findings, service role)
-       new → detected · resolved-and-back → reopened · fix recorded but still seen →
-       rescan_still_detected · re-checked and gone → rescan_clean (resolved)
-  → UI: scan page, finding page, dashboard, history
+Browser
+  React 19 / Vite / React Router
+        │
+        │ POST /api/scan
+        ▼
+Vercel serverless function
+  api/scan.mjs
+        │
+        ▼
+Source Search V2 service
+  labs/source-search-lab/lib/scan-service.mjs
+        │
+        ├─ GitHub fetcher
+        │    api.github.com
+        │    raw.githubusercontent.com
+        │
+        ├─ tokenizer + dual representations
+        ├─ Winnowing fingerprint retrieval
+        ├─ bounded candidate shortlist
+        ├─ ordered/contiguous verification
+        └─ conservative reporting gate
+             │
+             ▼
+Bundled reference index
+  labs/source-search-lab/data/reference-index.json
+             │
+             ▼
+JSON scan result
+        │
+        ▼
+/scan UI
+  strong findings
+  possible/common patterns
+  abstention
+  source links
+  excerpts
+  license
+  review/dismiss
+  rescan
 ```
 
-The Edge Function owns only runtime-specific concerns (auth, the ingestion boundary,
-persistence). Everything else is `runScanPipeline`, which the public demo, the Lattice seed
-script, and the test suite call directly. That is what keeps scanning portable.
+The Vercel function bundles the reference index explicitly through `vercel.json`.
 
-## Similarity providers
+## Public scan request
 
-`packages/provenance-core/src/scanner/providers/types.ts`:
+The public scanner does not require an account.
 
-```ts
-interface SimilarityProvider {
-  id: string;
-  describeCoverage(): ProviderCoverage;           // honest claim + limitations, shown on findings
-  discoverCandidates(probe): Promise<Candidate[]>;  // cheap first stage (fingerprint index)
-  compareCandidate(probe, candidate): Promise<Evidence | null>; // precise second stage
-}
-```
+`POST /api/scan` accepts one public GitHub repository URL.
 
-- `createStaticCorpusProvider` — an in-memory corpus with an inverted fingerprint index. It
-  backs both live providers below and is the natural shape for a customer's private corpus.
-- `createReferenceCorpusProvider` — **the only provider in real scans today**: PoryGen's
-  bundled reference corpus (4 original reference implementations, v2026.1).
-- The demo's `sample-corpus` provider — fictional sources, demo only.
+The server:
 
-Every finding's `evidence_json.provider` records the provider id, corpus, version, scope, and
-its coverage claim. Planned providers — licensed source corpora, commercial source intelligence
-(SCANOSS-class), GitHub candidate discovery, private enterprise corpora — plug in behind the same
-interface. The resolution rules key off the provider that produced a finding, so swapping
-providers never silently resolves anything (see [SCANNER.md](SCANNER.md#resolution-contract)).
+1. validates that the URL is an HTTPS `github.com/<owner>/<repo>` URL;
+2. resolves repository metadata;
+3. resolves the current default-branch commit;
+4. reads the complete Git tree when GitHub can provide it;
+5. selects supported JS/TS/Python files;
+6. fetches source from `raw.githubusercontent.com`;
+7. compares source against the prebuilt index;
+8. returns evidence and completeness metadata.
 
-## Where PoryGen fits
+The scanner does not clone or execute customer repositories.
 
-| Category | The question it answers |
-|---|---|
-| SCA / SBOM / source intelligence (JFrog, FOSSA, FossID, SCANOSS) | Does this resemble known open source, and what license applies? |
-| Agent attribution (AgentDiff, Agent Trace, git-ai-style tooling) | Which agent introduced this code? |
-| Technical due diligence | What risk exists in this codebase today? |
-| **PoryGen** | Continuously check the code AI-assisted teams ship, show suspicious ancestry and license context, help resolve it, verify the fix, and keep the resolution history. |
+## Why the live path uses Source Search V2
 
-Distinctive by design: vendor-independent, Git-centered, useful without agent attribution,
-similarity and license context in one workflow, remediation-first, continuous rather than
-one-off, founder-usable without a security program.
+The repository contains an older, broader authenticated application architecture built around Supabase, `packages/provenance-core`, persistence, billing, and resolution history.
 
-## Frontend
+That work remains useful groundwork, but it is **not required for the live MVP scan**.
 
-```
-src/
-  config/        plans.ts (all commercial plan data) · apexDogfood.ts (operator SKU) · site.ts
-  components/    AppShell, MarketingNav, Footer, CodeCompare, EvidenceList, ResolutionTimeline,
-                 Tags, Picture, Scrawl, BitCritter (secondary, in-app only)
-  features/
-    marketing/   landing, how it works, pricing, security, docs, 404
-    demo/        public /demo: sampleRepo, sampleEngine (real pipeline), DemoPage
-    dashboard/   "Your codebase today"
-    findings/    findings list, finding page, evidence view-model
-    scanner/     scan progress + results
-    history/     resolution history + optional editor attribution
-    repositories/, reports/ (evidence export), billing/, settings/, auth/
-  lib/           api.ts (all Supabase calls) · dbTypes · resolution (UI model) ·
-                 findingVocabulary · entitlements (plan derivation) · format
-  styles/        tokens · fonts · global · layout · app
-```
+The shortest path to a working product was to expose the validated Source Search V2 engine directly behind a Vercel function and make `/scan` the primary CTA.
 
-Routes other than `/` are code-split. `/demo` needs no account and no backend.
+Future integration should reuse useful persistence/auth components without putting them back in front of the first useful scan.
 
-## Evolving the scanner
+## Retrieval and reporting
 
-The synchronous Edge Function is right for the MVP and the free tier: it is bounded (40 files)
-and finishes in seconds. Continuous monitoring and larger repositories need longer jobs. The
-intended path, without new infrastructure:
+The live engine deliberately separates two questions.
 
-1. **Queue in Postgres.** `scans` already behaves as a job record (`status`, timestamps,
-   `error_code`). Add `claimed_by` / `claimed_at` / `attempts` columns and claim jobs with
-   `select … for update skip locked`.
-2. **Worker.** A Node worker (Supabase-adjacent container or a scheduled function) that runs
-   `runScanPipeline` with the **tree-sitter** normalizer and a full `git` checkout instead of
-   the 40-file sample, writing through the same tables and calling the same
-   `sync_tracked_findings`.
-3. **Triggers.** A GitHub App webhook (push / pull_request) inserts `queued` scans; PR status
-   checks read the resulting risk level.
-4. **Customer-controlled environments.** The same package runs in CI or on-prem; results post
-   back through an authenticated endpoint that calls `sync_tracked_findings`.
+### Retrieval
 
-None of this is built. Nothing in the current code needs Redis, Kafka, or a separate cloud.
+> Which indexed sources are worth checking closely?
 
-## Stripe and APEX
+For each customer region the engine uses two lexical representations and a prebuilt inverted fingerprint index to retrieve a bounded candidate set.
 
-`create-checkout` sells two distinct things: monthly subscriptions (`pro`, `team`) whose Price
-IDs come from `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_TEAM_MONTHLY`, and the APEX dogfood
-one-time SKU (`apex_dogfood`). Unconfigured plans fail closed. `stripe-webhook` is the only
-writer of payment state; the app derives a customer's plan from verified webhook rows only, and
-APEX test purchases never grant a plan. See [STRIPE_SETUP.md](STRIPE_SETUP.md) and
-[APEX_DOGFOOD.md](APEX_DOGFOOD.md).
+### Reporting
+
+> Is the evidence specific enough to show this source to a customer?
+
+A candidate does not become a strong match from generic normalized structure alone.
+
+Strong reporting requires structural evidence plus source-specific evidence such as preserving-token overlap or rare preserving fingerprints.
+
+If evidence is weak or generic, the result is possible/common-pattern or no reportable source.
+
+This is why the system can retrieve broadly while still abstaining.
+
+## Current reference index
+
+The bundled V2 index contains 6 pinned files from 3 real public repositories:
+
+- `sindresorhus/yocto-queue`
+- `date-fns/date-fns`
+- `psf/requests`
+
+The index is prebuilt outside the customer request path.
+
+A scan never crawls the web to build its corpus.
+
+The current corpus is an MVP limitation, not a claim of exhaustive search.
+
+## Scan completeness
+
+The repository fetcher separately records whether supported files were actually checked.
+
+Current limits:
+
+- 40 files;
+- 100 KB per file;
+- 750 KB total;
+- bounded scan duration;
+- generated/vendor/build directories excluded.
+
+Incomplete reasons are tracked independently from the capped UI detail list.
+
+A partial scan is reported as partial.
+
+## Rescan safety
+
+A finding that disappears on a later scan is only treated as resolved when:
+
+- the affected customer file was successfully fetched and compared; or
+- a complete Git tree proves the file was deleted.
+
+A partial rescan that simply fails to revisit the file cannot silently resolve it.
+
+## Client-side state
+
+The public MVP stores review/dismiss decisions in browser local storage.
+
+That is sufficient for the anonymous MVP, but it is not durable workspace history.
+
+The existing Supabase data model and RLS work can support the later connected-account product.
+
+## Existing authenticated stack
+
+The repository still includes:
+
+- Supabase Auth;
+- Postgres/RLS migrations;
+- scan/finding/history tables;
+- resolution functions;
+- Stripe groundwork;
+- APEX dogfood work;
+- evidence/history UI.
+
+Those are not currently the critical path for `/scan`.
+
+The next connected-product phase should add GitHub App identity and durable state without removing the anonymous first scan.
+
+## Evolution path
+
+The intended evolution is:
+
+1. harden the public endpoint;
+2. move stabilized production scanner code out of the `labs/` namespace;
+3. connect GitHub App + durable user/workspace state;
+4. expand the source index/providers;
+5. add async workers for larger repositories;
+6. add push/PR-triggered scans and GitHub Check Runs;
+7. enforce paid repository entitlements through Stripe + APEX.
+
+See [ROADMAP.md](../ROADMAP.md).
+
+## External systems used by the live MVP
+
+- Vercel — frontend + serverless scan function;
+- GitHub REST API — repository metadata, commit and tree;
+- raw.githubusercontent.com — source file contents;
+- server-side `GITHUB_TOKEN` — optional authenticated GitHub API capacity.
+
+No third-party LLM is in the runtime scan path.
