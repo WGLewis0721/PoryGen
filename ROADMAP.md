@@ -1,350 +1,322 @@
 # PoryGen Roadmap
 
-> **Product:** Continuous source-risk protection for AI-assisted development  
+> **Product:** Source-risk protection for AI-assisted development  
 > **Company:** Gray Matter  
-> **Secondary mission:** Real production proving ground for APEX  
-> **North-star experience:** Connect GitHub → choose a repository → PoryGen checks it → understand the result → keep shipping.
+> **Current stage:** Live public MVP  
+> **North-star experience:** Connect a repository once → PoryGen checks changes automatically → understand risk → act → keep shipping.
 
 ## Product thesis
 
 PoryGen exists because AI-assisted development makes it easier to ship code whose source lineage a developer did not personally inspect.
 
-The product should feel like a good wrench: useful immediately, no tuning required, no provider selection, no token management, no policy wizard, and no requirement that the customer understand the scanning engine.
+The product should feel like a good wrench: useful immediately, no tuning required, no provider selection, no token management, and no requirement that the customer understand the matching engine.
 
-PoryGen is a hosted service. The customer grants read-only access to selected GitHub repositories. The scanning engine and source intelligence stay on Gray Matter infrastructure. Customers use the service; they do not receive the proprietary scanner.
+The product promise remains:
+
+**Move fast. Keep it yours.**
 
 ### Product rules
 
-1. **Do 80% of the work for the customer.**
-2. **GitHub is the integration surface, not the product.**
-3. **No source-code retention as a product requirement.** Source may be fetched and processed transiently; PoryGen should not require retaining a customer's repository contents.
-4. **Read-only by default.** PoryGen should not need write access to customer source repositories to provide its core value.
-5. **No invented billing language.** No tokens, credits, scan packs, or novel units for the main SaaS.
-6. **The first useful experience is free.** One repository should receive the real product, not a crippled demo.
-7. **Charge for expansion and automation.** The natural upgrade moment is “I want this on the rest of my repos and I do not want to think about running it.”
-8. **The scanner is proprietary.** Public marketing/docs may explain the method, but production scanning logic, heuristics, provider strategy, corpora, and scoring stay private.
-9. **Be precise about coverage.** A clear result only means nothing matched the sources actually checked.
-10. **PoryGen remains a real APEX customer.** Billing, entitlement, refund, downgrade, and access decisions should exercise APEX in production-like conditions.
+1. Do most of the work for the customer.
+2. GitHub is the integration surface, not the product.
+3. Default to conservative reporting and explicit abstention.
+4. Never imply exhaustive coverage.
+5. Read-only access should be enough for the core value.
+6. Source should be processed transiently unless persistence is necessary for a customer-facing feature.
+7. One real useful experience should remain free.
+8. Charge for expansion, automation, collaboration, and higher coverage rather than invented tokens or scan packs.
+9. Keep the scanner server-side.
+10. Never present similarity as proof of copying, plagiarism, or AI authorship.
 
 ---
 
-## Current baseline — September 2026
+# Current baseline — September 22, 2026
 
-### Working now
+## Shipped and working
 
-- Vercel production site: **https://porygen.vercel.app**
-- React/Vite web application.
-- Supabase Auth, Postgres, RLS, scan persistence, findings, resolution history, and billing event tables.
-- Real public-GitHub repository ingestion.
-- Runtime-agnostic scan pipeline:
-  - normalization
-  - Winnowing fingerprints
-  - similarity-provider seam
-  - source comparison
-  - npm/PyPI license context
-  - findings and evidence
-- Side-by-side finding inspection.
-- Fix / dismiss / accept-risk / reopen workflow.
-- Automatic resolution when a rescan proves a finding is gone.
-- Evidence export.
-- Stripe Checkout and verified webhook plumbing exists but customer checkout is intentionally closed.
-- APEX one-time dogfood SKU exists separately from customer plans.
-- Public interactive demo uses the real pipeline against fictional sample data.
+- [x] Production site at **https://porygen.vercel.app**
+- [x] Public real-repository scanner at **/scan**
+- [x] No account required for the MVP scan
+- [x] Public GitHub URL input
+- [x] Latest default-branch commit resolution
+- [x] Bounded JavaScript / TypeScript / Python ingestion
+- [x] Source Search V2 retrieval and verification
+- [x] Strong match / possible-common-pattern / abstention outcomes
+- [x] Source-specific evidence required for strong matches
+- [x] Commit-pinned source links and matched line ranges
+- [x] Side-by-side excerpts
+- [x] License metadata
+- [x] Partial-scan disclosure
+- [x] Review / dismiss / reopen actions
+- [x] Browser-local decision persistence
+- [x] Safe rescan resolution logic
+- [x] Vercel SPA deep-link rewrites
+- [x] Server-side GitHub token support
+- [x] Production deployment verified with real public scans
+- [x] Sample guided demo remains available at **/demo**
 
-### Important gaps
+## Live MVP proof
 
-- GitHub App installation flow.
-- Private repository access.
-- Automatic push / pull-request scans.
-- GitHub status checks.
-- Production-grade async scan worker for larger repositories.
-- A real second source-intelligence provider beyond the bundled reference corpus.
-- Customer plan enforcement.
-- Final production billing configuration.
-- Team access / organization controls.
-- Enterprise deployment options.
-- GitHub Marketplace distribution.
-- Canonical retention/privacy contract.
-- Repository source code is currently public and should be moved private before more proprietary scanning intelligence is added.
+Human-style production testing successfully scanned:
+
+- `sindresorhus/yocto-queue` — strong match recovered;
+- `psf/requests` — multiple strong matches recovered;
+- `expressjs/cors` — no strong match.
+
+Observed production scan times were roughly 1–3 seconds for those examples.
+
+## Current limitations
+
+- public repositories only;
+- JS / TS / Python only;
+- 40-file / 100-KB-per-file / 750-KB-per-scan bounded path;
+- current reference index is only 6 pinned files from 3 public repositories;
+- review/dismiss decisions on the public scanner are browser-local, not cloud-persisted;
+- no GitHub App;
+- no private repositories;
+- no automatic push or pull-request scanning;
+- no GitHub Check Runs;
+- no team/workspace controls;
+- no customer billing enforcement;
+- no large async worker;
+- no broad production source corpus.
+
+These are product-growth limitations, not blockers for the current public MVP.
 
 ---
 
-# Phase 0 — Protect and stabilize the product
+# Phase 0 — Live MVP foundation
 
-**Goal:** Make the existing product safe to operate commercially before adding more intelligence.
+**Status: COMPLETE**
 
-### Deliverables
-
-- [ ] Make the PoryGen GitHub repository private.
-- [ ] Verify Vercel, Supabase, ChatGPT, Claude/Cursor/Copilot workflows, and other authorized agents still have required private-repo access.
-- [ ] Keep the production scanner server-side. Do not ship proprietary matching logic in browser bundles, public Actions, downloadable containers, or open-source packages.
-- [ ] Treat `https://porygen.vercel.app` as the canonical production URL.
-- [ ] Remove or update stale Cloudflare deployment references.
-- [ ] Fix Vercel SPA rewrites so routes such as `/pricing`, `/docs`, and `/security` work on direct navigation.
-- [ ] Re-run Supabase security advisors and resolve actionable warnings.
-- [ ] Define the retention statement:
-  - source is read for analysis;
-  - source contents are not retained as a product requirement;
-  - operational/billing metadata is retained only where needed to deliver the service.
-- [ ] Add Privacy Policy, Terms of Service, and a plain-language security/data-handling page before public paid launch.
-- [ ] Document what parts of PoryGen are trade secrets versus customer-visible behavior.
+Goal: prove that a normal person can use the product without setup.
 
 ### Exit criteria
 
-A customer can safely visit production, understand what PoryGen does with their code, and Gray Matter can continue developing without exposing the proprietary scanner source.
+A visitor can go to PoryGen, paste a real public GitHub repository, click Scan, understand the result, inspect evidence, and take an action without being taught the system.
+
+**Met.**
 
 ---
 
-# Phase 1 — “Pick it up and use it” GitHub experience
+# Phase 1 — Harden the public MVP
 
-**Goal:** Reduce onboarding to the smallest possible interaction.
+**Goal:** Make the current no-account scanner dependable enough to share broadly.
+
+### Deliverables
+
+- [ ] Make the PoryGen repository private before adding materially more proprietary matching intelligence.
+- [ ] Rotate and manage production GitHub credentials through Vercel secrets only.
+- [ ] Add basic abuse/rate-limit protection to the unauthenticated scan endpoint.
+- [ ] Add lightweight operational visibility for scan failures, latency, GitHub rate-limit errors, and Vercel function failures.
+- [ ] Move the production scanner modules out of the `labs/` namespace once the implementation stabilizes; keep the same behavior.
+- [ ] Define and publish the canonical data-handling statement for public scans.
+- [ ] Add Privacy Policy and Terms before taking payment.
+- [ ] Keep direct-route/deep-link behavior covered.
+- [ ] Add a clear service-status/failure message when GitHub or the scanner is unavailable.
+- [ ] Keep the current conservative strong-match gate; do not resume similarity research unless real customer scans expose a specific problem.
+
+### Exit criteria
+
+The public scanner can be shared with strangers without founder supervision and without an obvious operational or security foot-gun.
+
+---
+
+# Phase 2 — GitHub connection + durable user state
+
+**Goal:** Turn the public utility into a product a developer can keep using.
 
 ### Customer flow
 
 ```
 Visit PoryGen
 → Connect GitHub
-→ choose repository
-→ scan begins
-→ results
+→ choose repositories
+→ scan
+→ review findings
+→ decisions and history persist
 ```
 
 ### Deliverables
 
 - [ ] Create the PoryGen GitHub App.
-- [ ] Request only the minimum permissions needed for scanning.
-- [ ] Allow installation on selected repositories rather than requiring organization-wide access.
-- [ ] Use GitHub identity as the primary onboarding identity wherever practical.
-- [ ] Replace manual repository URL entry with a repository picker.
-- [ ] Support both public and authorized private repositories.
-- [ ] Generate short-lived installation tokens server-side.
-- [ ] Keep GitHub credentials/tokens off the browser.
-- [ ] Make first scan start with sensible defaults and no configuration wizard.
-- [ ] Hide advanced thresholds/provider controls from the default path.
-- [ ] Make failure states actionable: permission missing, repo too large, provider unavailable, rate limited, unsupported file type.
-
-### UX standard
-
-A new user should not need to know what Winnowing, fingerprints, SPDX, source providers, scan thresholds, or corpus coverage mean in order to get a useful result.
+- [ ] Request minimum read-only permissions.
+- [ ] Allow selected-repository installation.
+- [ ] Use GitHub identity as the primary onboarding path where practical.
+- [ ] Add repository picker.
+- [ ] Support authorized private repositories.
+- [ ] Generate short-lived GitHub installation tokens server-side.
+- [ ] Persist repositories, scans, findings, dismissals, reviews, and resolution history.
+- [ ] Migrate the useful existing Supabase/RLS groundwork into this flow rather than forcing auth ahead of the first scan.
+- [ ] Preserve a no-account public scan as the acquisition path.
+- [ ] Make “save this repo / keep watching it” the natural conversion from anonymous scan to account.
 
 ### Exit criteria
 
-A developer unfamiliar with PoryGen can connect GitHub and get a useful scan without documentation or manual setup.
+A user can scan anonymously, connect GitHub when they want persistence/private access, and return later to the same repository history.
 
 ---
 
-# Phase 2 — Commercial system + APEX proving ground
+# Phase 3 — Broaden source coverage
 
-**Goal:** Turn PoryGen into a simple revenue-producing SaaS without payment-wall fatigue.
+**Goal:** Make a clear result materially more informative than the six-file MVP corpus.
+
+### Deliverables
+
+- [ ] Grow the pinned public-code index substantially.
+- [ ] Add at least one production-grade source-intelligence path:
+  - licensed public-source corpus;
+  - commercial source-intelligence provider;
+  - or a Gray Matter-operated public-code index.
+- [ ] Keep candidate retrieval local/bounded during a customer scan.
+- [ ] Keep precise verification and conservative reporting.
+- [ ] Preserve provider/corpus/version/coverage disclosure on every finding.
+- [ ] Keep customer-facing semantics simple: strong / possible-common / no strong match.
+- [ ] Benchmark changes only when changing the matching/reporting logic; do not turn routine product work into another research program.
+
+### Exit criteria
+
+The product's usefulness no longer depends on a tiny demonstration corpus.
+
+---
+
+# Phase 4 — Production scan infrastructure
+
+**Goal:** Scan larger repositories reliably without making the web request do all the work.
+
+### Deliverables
+
+- [ ] Add Postgres-backed scan queue.
+- [ ] Add bounded worker claiming/retry.
+- [ ] Support full or substantially larger repository scans.
+- [ ] Use the stronger parsing/normalization path where it materially improves results.
+- [ ] Preserve scan completeness metadata.
+- [ ] Keep source transient wherever possible.
+- [ ] Add observable scan states and retry/recovery.
+- [ ] Keep fast synchronous scanning for small/public free scans if it remains useful.
+
+### Exit criteria
+
+Repository size and request duration stop being major constraints on the product.
+
+---
+
+# Phase 5 — Ambient GitHub protection
+
+**Goal:** Make PoryGen useful without remembering to click Scan.
+
+### Deliverables
+
+- [ ] Push webhooks.
+- [ ] Pull-request webhooks.
+- [ ] Diff-aware scanning.
+- [ ] Automatic rescan on meaningful changes.
+- [ ] GitHub Check Runs.
+- [ ] Deep links from GitHub checks to PoryGen evidence.
+- [ ] Notification policy that avoids alert fatigue.
+- [ ] Optional repository badge that says PoryGen checked the repo without implying certification.
+
+### Exit criteria
+
+A user connects PoryGen once and only thinks about it when there is something worth reviewing.
+
+---
+
+# Phase 6 — Monetization + APEX
+
+**Goal:** Charge for expanded protection without making billing the product.
 
 ## Commercial model
 
 ### Free
 
-- **1 protected repository**
-- Full-quality PoryGen experience
-- No card required
-- No crippled findings
-- Manual scanning available
-- Enough automation to understand the product's value
+- public/no-account scan remains available;
+- one connected protected repository;
+- full-quality findings;
+- manual scans;
+- enough retained history to experience the product.
 
 ### Paid
 
-Paid begins when the user wants PoryGen across more of their engineering surface.
+Primary customer-facing unit: **protected repositories and automation**.
 
-Primary billing unit: **protected repositories**.
-
-Do **not** make tokens, credits, scan packs, or per-scan charges the customer-facing mental model.
-
-Exact paid price and repository bands should be validated before checkout is opened. Existing `$49 Pro / $199 Team` values are placeholders until the new repo-expansion model is finalized.
-
-### Enterprise
-
-Custom commercial terms for organization-wide coverage, private/VPC deployment, SSO, internal source corpora, support, procurement, and contractual requirements.
-
-## Deliverables
-
-- [ ] Finalize Free / Pro / Team repository limits and pricing.
-- [ ] Configure real Stripe products/prices.
-- [ ] Turn on production Checkout only after an end-to-end paid test succeeds.
-- [ ] Use Stripe Customer Portal for payment-method updates, invoices, cancellation, and subscription management.
-- [ ] Enforce repository entitlements server-side.
-- [ ] Keep internal abuse/compute guardrails separate from customer-facing pricing language.
-- [ ] Remove “checkout opens soon” UI.
-- [ ] Replace sales-contact placeholders.
-- [ ] Exercise APEX with the real PoryGen lifecycle:
-  - checkout succeeds;
-  - payment grants repo entitlement;
-  - upgrade expands entitlement;
-  - downgrade reduces entitlement safely;
-  - failed payment changes rights according to policy;
-  - refund/reversal produces a deterministic entitlement state;
-  - every decision can answer “can this customer protect this repository right now, and why?”
-- [ ] Keep PoryGen's customer plans separate from the APEX operator/dogfood SKU.
-
-### Exit criteria
-
-A stranger can become a free user, receive real value, upgrade without talking to Gray Matter, pay successfully, receive the correct entitlement, manage billing, and downgrade/cancel cleanly.
-
----
-
-# Phase 3 — Make PoryGen ambient
-
-**Goal:** Create the “how did I ship without this?” behavior.
-
-The product becomes sticky when the user stops remembering to run it.
+Do not sell tokens, credits, or scan packs as the main mental model.
 
 ### Deliverables
 
-- [ ] GitHub push webhooks.
-- [ ] Pull-request webhooks.
-- [ ] Incremental/diff-aware scanning where appropriate.
-- [ ] Automatic rescan on meaningful code changes.
-- [ ] GitHub Check Runs with a simple result:
-  - checked / clear
-  - review suggested
-  - strong source match
-  - scan unavailable
-- [ ] Deep-link GitHub findings back to PoryGen evidence.
-- [ ] Optional README/status badge that reports that PoryGen checked the repository without claiming certification.
-- [ ] Notification policy that avoids alert fatigue.
-- [ ] Paid automation becomes the primary expansion incentive.
+- [ ] Finalize Free / Pro / Team repository limits.
+- [ ] Validate pricing with actual users before treating existing price placeholders as final.
+- [ ] Configure production Stripe products/prices.
+- [ ] Enforce repo entitlements server-side.
+- [ ] Use Stripe Customer Portal for billing management.
+- [ ] Integrate APEX as the authority for paid rights.
+- [ ] Validate upgrade, downgrade, failed payment, cancellation, refund, and reversal behavior.
+- [ ] Keep the APEX operator dogfood SKU separate from PoryGen customer pricing.
 
 ### Exit criteria
 
-A paying customer can forget PoryGen exists until it finds something worth their attention.
+A stranger can get value free, connect more repositories, pay without founder involvement, and receive the correct rights immediately.
 
 ---
 
-# Phase 4 — Production-grade scanning brain
+# Phase 7 — Teams and enterprise
 
-**Goal:** Make the underlying intelligence strong enough that the ambient workflow deserves trust.
-
-### Deliverables
-
-- [ ] Add a real second similarity/source-intelligence provider.
-- [ ] Evaluate GitHub candidate discovery, licensed corpora, and commercial source-intelligence providers.
-- [ ] Preserve the provider interface so source coverage can improve without rewriting the customer workflow.
-- [ ] Move large scans to an async Postgres-backed queue + worker.
-- [ ] Full repository checkout for supported scans rather than the current bounded sample path.
-- [ ] Use the stronger tree-sitter normalization path in worker execution.
-- [ ] Add bounded retry/recovery and observable scan states.
-- [ ] Improve candidate ranking and false-positive suppression.
-- [ ] Benchmark precision/recall using controlled corpora and known transformations.
-- [ ] Keep every finding explicit about provider, corpus, version, and coverage.
-- [ ] Separate proprietary scoring/heuristics from public-facing application code.
-
-### Exit criteria
-
-PoryGen's value is no longer dependent on the small bundled reference corpus, and larger real repositories can be scanned reliably without blocking web requests.
-
----
-
-# Phase 5 — Organic distribution
-
-**Goal:** Let existing users create the next users without turning the product into spam.
+**Goal:** Expand from founder/developer utility to engineering infrastructure without making the solo product heavier.
 
 ### Deliverables
 
-- [ ] Publish the PoryGen GitHub App.
-- [ ] Prepare GitHub Marketplace listing when install/authorization and billing are production-ready.
-- [ ] One-click install from the marketing site.
-- [ ] Shareable, non-sensitive finding/report views where the customer explicitly chooses to share.
-- [ ] Optional “PoryGen checked” badge/check status.
-- [ ] Useful free repository remains the acquisition engine.
-- [ ] Upgrade prompt appears at the natural expansion point: adding another protected repo or enabling broader automation.
-- [ ] Measure:
-  - visitor → GitHub connect
-  - connect → first scan
-  - first scan → second scan
-  - free repo → paid expansion
-  - paid churn
-  - findings reviewed/resolved
-  - percentage of customers enabling automatic checks
-
-### Exit criteria
-
-A meaningful portion of new installations originate from GitHub visibility, developer sharing, or the free product rather than direct founder outreach.
-
----
-
-# Phase 6 — Teams and organizations
-
-**Goal:** Expand from a developer utility into engineering infrastructure without making the solo experience heavier.
-
-### Deliverables
-
-- [ ] GitHub organization installation.
-- [ ] Team/workspace membership.
+- [ ] Workspaces and organization installs.
 - [ ] Roles and permissions.
-- [ ] Organization-wide repository inventory.
-- [ ] Shared policies and required-review rules.
-- [ ] Central findings queue.
-- [ ] Long-term resolution history.
+- [ ] Shared findings queue.
+- [ ] Required-review policies.
+- [ ] Organization repository inventory.
 - [ ] Audit exports.
-- [ ] SSO for enterprise.
-- [ ] Enterprise support/SLA path.
+- [ ] SSO.
+- [ ] Enterprise retention controls.
+- [ ] VPC/on-prem/private worker option.
+- [ ] Customer-owned private source corpus.
 
 ### Exit criteria
 
-An engineering organization can adopt PoryGen centrally while individual developers still experience the same simple GitHub-native workflow.
+An organization can adopt PoryGen centrally while the developer experience remains simple.
 
 ---
 
-# Phase 7 — Enterprise/private execution
+# Phase 8 — Distribution
 
-**Goal:** Support customers whose code or policy cannot leave their environment.
+**Goal:** Let GitHub and the product create the next customer.
 
 ### Deliverables
 
-- [ ] Package the existing runtime-agnostic scanner for private execution.
-- [ ] VPC/on-prem worker option.
-- [ ] Customer-owned private source corpus provider.
-- [ ] Signed result exchange between private worker and PoryGen control plane.
-- [ ] SSO, audit, retention controls, and contractual data-handling options.
-- [ ] Evaluate Sigstore or equivalent signing only where it improves verifiability rather than marketing.
-
-### Exit criteria
-
-PoryGen can serve regulated or highly sensitive customers without handing over the proprietary product or weakening the hosted SaaS experience.
-
----
-
-# APEX validation track
-
-PoryGen began as a real application for proving APEX. That remains strategically valuable.
-
-Every commercial milestone should deliberately test an APEX question:
-
-| PoryGen event | APEX question |
-|---|---|
-| Free account protects first repo | What entitlement exists without payment? |
-| Customer adds repo #2 | Is payment required for this action right now? |
-| Successful Stripe payment | What rights should be granted and why? |
-| Upgrade | How do rights expand immediately? |
-| Downgrade | Which repos remain protected and when does the change apply? |
-| Failed renewal | What becomes read-only, grace-period, or blocked? |
-| Refund/reversal | What rights remain after value was already consumed? |
-| Team plan | Who inherits workspace-level rights? |
-| Enterprise exception | How are contractual overrides represented and audited? |
-
-PoryGen should not contain bespoke entitlement logic that APEX is meant to own once the APEX integration is production-ready.
+- [ ] GitHub Marketplace listing.
+- [ ] One-click GitHub App install from the site.
+- [ ] Shareable non-sensitive finding/report views.
+- [ ] Optional “PoryGen checked” status/badge.
+- [ ] Measure:
+  - visitor → first public scan;
+  - first scan → second scan;
+  - public scan → GitHub connect;
+  - connect → protected repo;
+  - protected repo → paid expansion;
+  - findings reviewed/resolved;
+  - automation adoption;
+  - churn.
 
 ---
 
-# Near-term execution order
+# Immediate execution order
 
-The next work should happen in this order:
+Do the next work in this order:
 
-1. **Protect:** private repo, canonical Vercel configuration, route fixes, data-handling/legal basics.
-2. **Connect:** GitHub App, minimum read-only permissions, repository picker, private repo scanning.
-3. **Monetize:** one free repo, repo-based paid expansion, live Stripe + APEX entitlement path.
-4. **Automate:** push/PR monitoring and GitHub checks.
-5. **Improve coverage:** second real source provider and async worker.
-6. **Distribute:** GitHub Marketplace and organic GitHub-native discovery.
-7. **Expand:** teams, organizations, enterprise/private execution.
+1. **Harden the live public MVP** — secrets, abuse protection, operational visibility, privacy/legal basics.
+2. **Connect GitHub** — app install, repository picker, private repos, durable user state.
+3. **Broaden coverage** — grow the index / add real source intelligence.
+4. **Scale scanning** — async worker for larger repositories.
+5. **Automate** — push/PR checks.
+6. **Monetize** — repo-based expansion with Stripe + APEX.
+7. **Expand** — teams, enterprise, Marketplace.
 
-Do not prioritize team administration, enterprise packaging, exotic attestation, or additional dashboards ahead of the first four steps.
+Do not return to open-ended matcher research unless production use gives a concrete reason.
 
 ---
 
@@ -352,6 +324,6 @@ Do not prioritize team administration, enterprise packaging, exotic attestation,
 
 PoryGen is succeeding when a developer can say:
 
-> “I connected GitHub once. PoryGen checks what my coding agents give me, and now I do not like shipping without seeing that it checked the repo.”
+> “I pasted my repo, PoryGen showed me exactly what looked suspicious and where it came from, and now I want it checking every change automatically.”
 
-The business is succeeding when that developer can use one repository indefinitely for free, naturally wants PoryGen on additional repositories, upgrades without learning a new billing model, and remains a customer because the protection is automatic rather than because the product manufactures friction.
+The business is succeeding when the free public scan creates trust, GitHub connection creates retention, broader repository protection creates the upgrade moment, and automation creates stickiness.

@@ -1,84 +1,88 @@
 # Security
 
-## Row Level Security
+## Live public scanner
 
-Every table has RLS enabled. Pattern: `auth.uid() = owner_id`, with an explicit `OR is_demo =
-true` read exception for the seeded Lattice sample so it's viewable without an account.
+The MVP scan path is intentionally narrow.
 
-- `repositories`, `scans`, `scan_findings`, `provenance_events` — unchanged policies (owner
-  read/write; demo read).
-- `tracked_findings`, `finding_resolutions` (new) — **select only** (own or demo). There are no
-  client insert, update, or delete policies. Status changes go through
-  `record_finding_action()`; scan reconciliation goes through `sync_tracked_findings()`.
-- `billing_customers`, `billing_events` — owner read only; written by Edge Functions with the
-  service role.
+`POST /api/scan` accepts a public GitHub repository URL and runs server-side on Vercel.
 
-`supabase/tests/resolution.test.ts` runs all migrations against PGlite with Supabase-shaped
-roles and verifies: cross-account reads are blocked, anonymous visitors see only the demo
-repository, direct client writes to tracked findings and history fail, history can't be updated
-even by the service role, only the service role can reconcile scans, transitions and reasons are
-enforced, demo findings can't be acted on by other accounts, and the pre-existing scan/finding
-policies still hold.
+The scanner:
 
-## Integrity of resolution history
+- accepts only HTTPS `github.com/<owner>/<repo>` URLs;
+- validates owner/repository names;
+- contacts only GitHub API and raw GitHub hosts for source ingestion;
+- never executes repository code;
+- never runs package installation, builds, scripts, or shell commands from the repository;
+- returns no-store responses.
 
-- A person can never mark a finding resolved. Only a scan can, through
-  `sync_tracked_findings`, which requires proof the finding was re-checked (see
-  [SCANNER.md](SCANNER.md#resolution-contract)).
-- `sync_tracked_findings` is executable by `service_role` only; `scan-repository` calls it with
-  the service-role key after its own pipeline run.
-- `finding_resolutions` is append-only (trigger), so decisions and their reasons can't be edited
-  after the fact.
-- Both functions are `security definer` with `search_path = ''` and fully-qualified names;
-  `EXECUTE` is revoked from `public` and granted narrowly.
+## Server-side GitHub credential
 
-**Known limit (pre-existing design):** scans and scan findings are written with the caller's
-JWT under RLS, so an account can write its own scan rows directly. Reconciliation only runs on
-scans the Edge Function produced, which limits the impact, but diligence-grade evidence would
-move scan writes to the service role inside the Edge Function and remove the client insert and
-update policies on `scans` / `scan_findings`. That is a deliberate follow-up, not done here,
-because it must ship together with the redeployed function.
+`GITHUB_TOKEN` is a server-side production secret.
 
-## Server-side secrets
+It is used only to increase GitHub REST API capacity and is not bundled into the browser.
 
-`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`,
-`STRIPE_PRICE_TEAM_MONTHLY`, `STRIPE_APEX_DOGFOOD_PRICE_ID` (legacy `STRIPE_PRO_PRICE_ID`),
-`APEX_CUSTOMER_ID`, `GITHUB_TOKEN`, and the service-role key are Edge Function secrets only.
-Browser-visible configuration is limited to `VITE_SUPABASE_URL`,
-`VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SALES_EMAIL`, and `VITE_BILLING_CHECKOUT_ENABLED`.
-`billing-diagnostics` returns only non-secret values (booleans, Price IDs, the Stripe account ID).
+The token should remain minimum-scope and should be rotated if exposed outside the secret store.
 
-## Webhook verification
+## Ingestion limits
 
-`stripe-webhook` verifies `Stripe-Signature` (HMAC-SHA256 over `${timestamp}.${rawBody}`,
-constant-time comparison) against the raw body, and treats a duplicate `stripe_event_id` as an
-idempotent success. Plan state is derived from those verified rows only; reaching
-`/billing/success` is never treated as payment.
+Current public-scan limits:
 
-## Ingestion boundary (SSRF)
+- 40 supported files;
+- 100 KB per file;
+- 750 KB total source;
+- bounded fetch duration;
+- build/vendor/generated/dependency directories excluded.
 
-`supabase/functions/scan-repository/github.ts` accepts only `https://github.com/<owner>/<repo>`
-or `owner/repo`; owner and repo are regex-validated before any request, and every fetch targets
-a hardcoded host (`api.github.com`, `raw.githubusercontent.com`). Non-https schemes, other
-hosts, and userinfo tricks are rejected. Registry lookups use fixed hosts with a 3-second
-timeout.
+The scanner tracks incompleteness explicitly and shows partial-scan warnings.
 
-## Limits and execution
+## Public-scan retention
 
-40 files, 200 KB per file, 2 MB per scan; dependency, build, and vendor directories skipped;
-text extensions only. The scanner reads text and hashes tokens — no `eval`, no dynamic import,
-no shell execution, no builds.
+The live public scanner fetches source for analysis in request memory.
 
-## Data retention
+The public MVP does not persist customer repository contents, scan findings, or source excerpts server-side.
 
-PoryGen stores scan metadata, findings, and — for flagged files only — an excerpt of the matched
-region (at most 40 lines / 4,000 characters) so the side-by-side view works. It does not store
-the contents of files that weren't flagged, does not train models on customer code, and does not
-send code to third-party AI services. Deleting a repository cascades to its scans, findings, and
-resolution history. This is stated publicly on `/security`.
+The browser stores the most recent scan result and review/dismiss decisions in local storage so the anonymous user can rescan and preserve decisions on that browser.
 
-## The public demo
+No customer code is sent to a runtime LLM.
 
-`/demo` runs entirely in the browser on fictional data; it makes no network requests for scan
-data and writes nothing. The fictional "public source" lives under `git.example.org` (an RFC 2606
-reserved domain), so it can't be mistaken for, or collide with, a real project.
+## Source reference data
+
+The V2 reference index is prebuilt and bundled into the Vercel function.
+
+A customer scan does not crawl the web or build a new reference corpus.
+
+## Authenticated application security
+
+The repository also contains the earlier Supabase-authenticated application.
+
+That stack uses Row Level Security and includes persistent repositories, scans, findings, tracked findings, resolution history, and billing tables.
+
+Those controls remain relevant for the future connected/private-repository product, but they are not required for the current anonymous `/scan` flow.
+
+When durable user state is reintroduced into the primary experience, server-authoritative scan writes and the existing RLS tests should remain mandatory.
+
+## Resolution integrity
+
+The public scanner's browser-side resolution helper follows the same conservative rule as the V2 lab:
+
+A finding that disappears is only considered resolved when the affected file was successfully rechecked, or a complete Git tree confirms deletion.
+
+A partial scan cannot resolve a finding merely because it failed to revisit the file.
+
+## Current security priorities
+
+Before broad public or paid launch:
+
+1. keep production secrets only in Vercel/server-side secret stores;
+2. rotate any credential that has been pasted into non-secret communication;
+3. add abuse/rate-limit controls for the anonymous scan endpoint;
+4. add operational monitoring for GitHub quota and serverless failures;
+5. publish Privacy Policy and Terms;
+6. keep the repository private before adding materially more proprietary scanner intelligence;
+7. preserve the no-source-retention design as features evolve.
+
+## Claims
+
+PoryGen does not claim that a scan proves originality, copying, or AI authorship.
+
+A clean result is bounded by the sources and files actually checked.

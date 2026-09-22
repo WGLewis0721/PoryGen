@@ -1,88 +1,87 @@
-# Demo flow
+# Customer flows
 
-Two demos exist, for two audiences.
+## 1. Real public scan — `/scan`
 
-## 1. Public sample demo — `/demo` (no account)
+This is the primary MVP experience.
 
-For a prospective customer who should understand PoryGen in about 90 seconds without signing up,
-confirming an email, configuring anything, or installing an extension.
+No account is required.
 
-**What's real and what isn't.** The repository ("Lattice", `lattice-app`) and the "public
-source" projects (under `git.example.org`, a reserved domain) are fictional and written for the
-demo. The scan is real: `src/features/demo/sampleEngine.ts` runs the production
-`runScanPipeline` in the browser with a `sample-corpus` provider built on the same
-`createStaticCorpusProvider` as real scans. 307 of the sample's 312 files are simulated as clear
-(paths only); the five real sample files are scanned. The page is labelled *Sample interactive
-demo* throughout. No backend calls, nothing written.
+### Flow
 
-**Guided path:**
+1. Open `https://porygen.vercel.app/scan`.
+2. Paste a public GitHub repository URL.
+3. Click **Scan**.
+4. PoryGen resolves the latest default-branch commit and checks supported JS/TS/Python files.
+5. Results show:
+   - strong source matches;
+   - possible/common patterns;
+   - or no strong source match.
+6. Each reportable finding includes:
+   - customer file and matched lines;
+   - commit-pinned public source;
+   - source license;
+   - side-by-side excerpts;
+   - coverage/contiguous evidence;
+   - a plain-English explanation.
+7. The user can **Review source**, **Dismiss** with a reason, **Reopen**, or push a fix and **Rescan latest commit**.
 
-1. **Start** — context: the agent committed `a3f9c21` "Add API rate limiting". *Run sample scan.*
-2. **Scanning** — progress over file paths and pipeline phases (skipped under reduced motion).
-3. **Summary** — 312 files checked: 309 clear · 1 common pattern · 1 review suggested · 1 strong
-   source match. Findings list with scores and licenses. *Open finding.*
-4. **Finding** — *Strong source match in `src/api/rateLimit.ts`*: your code beside the possible
-   source with matched lines highlighted; similarity 93% (74 of 80 structural fingerprints);
-   possible source `git.example.org/sample-oss/slidewindow` (fictional); license GPL-3.0 and what
-   it means; the engine's "why it was flagged" sentence; what was compared against. Actions:
-   *Replace it — simulate the fix* (recommended), *Start review*, *Dismiss as false positive*,
-   *Accept the risk*.
-5. **Fix** — the replacement in `b81e0d4`: a different design (fixed-window counter on the app's
-   cache). *Record fix and rescan.*
-6. **Rescan** — the real pipeline runs on the new revision.
-7. **Resolved** — 93% → 6% (below the 55% threshold), counts update (0 strong), the stage rail
-   reads FOUND → REVIEWED → REMEDIATED → RESCANNED → RESOLVED, and the history lists detected,
-   fix recorded, clean rescan.
-8. **End** — "Want PoryGen watching your real repo?" → *Scan your repo* (`/sign-up`).
+Review/dismiss state is stored in browser local storage for the MVP.
 
-**Alternate paths:** *Dismiss* and *Accept the risk* require a reason (an empty reason is
-refused with an inline error), record it in history, and explain that the decision survives
-rescans; *Try the fix path instead* reopens the finding and the history keeps the detour.
+### Rescan behavior
 
-Covered by `src/features/demo/DemoPage.test.tsx` (full guided path and the reason rule) and
-`sampleEngine.test.ts`, which also keeps the homepage's pinned sample numbers identical to the
-engine's output.
+If the repository commit changed, PoryGen only calls a disappeared finding resolved when the affected file was successfully rechecked or a complete tree proves the file was deleted.
 
-## 2. Authenticated walkthrough
+If the same commit is scanned again, the UI says results are unchanged.
 
-1. **Account** — `/sign-up` → confirmation email (Supabase Auth) → `/sign-in`.
-2. **Scan** — `/repositories/new` → a public GitHub URL (e.g. `https://github.com/expressjs/cors`)
-   → *Run scan*. The scan page shows each phase live, then per-file results (clear / common
-   pattern / review suggested / strong source match), *Needs attention*, informational rows, and
-   *What this scan compared against*.
-3. **Finding** — open a flagged finding: what PoryGen found, where it is and what it might
-   resemble (side by side), how strong the evidence is, license context, why it matters, and
-   *Did the fix pass?*. Actions on the right: start review, record a fix (with a revision), dismiss
-   or accept risk (reason required), add a note, rescan.
-4. **Rescan** — *Rescan repository*. `sync_tracked_findings` resolves what the scan re-checked
-   and no longer sees, records a failed fix if it's still there, and reopens anything that came
-   back.
-5. **Overview** — `/dashboard`: *Your codebase today* (clear changes, review suggested, open
-   source collisions, resolved), open findings, recent activity and resolutions, repositories.
-6. **History** — `/history`: every resolution event across repositories; *Editor attribution*
-   shows the optional VS Code ledger.
-7. **Evidence** — from a scan, *Export evidence*: JSON download or print summary, including
-   resolution history and coverage.
-8. **Sample repository** — `porygen/lattice` (public, read-only) shows all three outcomes: a
-   strong match in review, an AGPL dependency with an accepted risk and its reason, and a legacy
-   file resolved by a clean rescan after it was deleted. Actions are disabled there.
+### Current boundaries
 
-Requires the resolution-history migration; without it, steps 3–6 show an explicit "not enabled
-on this deployment yet" state.
+- public repositories only;
+- JS/TS/Python only;
+- bounded file/byte/time limits;
+- small reference corpus;
+- no durable cloud history yet.
 
-## 3. Billing (operator)
+## 2. Guided sample demo — `/demo`
 
-`/billing` shows the current plan (derived from verified webhooks), usage against the plan
-(displayed, not enforced), and plan options. With subscription prices unconfigured, checkout is
-disabled and `create-checkout` answers `PLAN_NOT_CONFIGURED`. `/billing/diagnostics` shows
-non-secret Stripe state, subscription price status, and the separate APEX dogfood section — see
-[APEX_DOGFOOD.md](APEX_DOGFOOD.md).
+The sample demo remains available for someone who wants to understand the workflow without using a real repository.
 
-## Quality checks
+The repository and source examples are fictional. The demo is clearly labelled as sample data.
 
-```bash
-npm install
-npm run build   # tsc -b && vite build
-npm test        # vitest, all workspaces + PGlite database tests
-npm run lint    # oxlint (warnings only)
+It demonstrates:
+
 ```
+scan
+→ inspect finding
+→ review/dismiss
+→ simulate fix
+→ rescan
+→ resolved
+```
+
+The demo is educational. It is not evidence that a particular real repository was scanned.
+
+The final CTA now sends the user to `/scan`, not sign-up.
+
+## 3. Connected/authenticated product — future path
+
+The repository still contains earlier Supabase-authenticated screens and persistence groundwork.
+
+The intended future flow is:
+
+```
+anonymous public scan
+→ Connect GitHub when the user wants persistence/private repos
+→ choose protected repositories
+→ durable findings/history
+→ automatic checks
+```
+
+Authentication is no longer allowed to block the first useful experience.
+
+## 4. Billing — future customer path
+
+Billing groundwork exists, but paid customer entitlements are not part of the public MVP.
+
+The intended upgrade moment is protecting additional repositories and enabling automation, not paying to perform the first scan.
+
+See [ROADMAP.md](../ROADMAP.md) and [STRIPE_SETUP.md](STRIPE_SETUP.md).

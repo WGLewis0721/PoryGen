@@ -1,55 +1,87 @@
 # Progress
 
-## 2026.09 course correction — done (on branch, not deployed)
+## 2026-09-22 — live MVP shipped
 
-- Product repositioned: continuous source-risk protection for AI-assisted development.
-  Provenance, AI-composition percentages, and M&A framing moved out of the pitch; editor
-  attribution kept as optional history.
-- New design system and marketing site (`/`, `/how-it-works`, `/pricing`, `/security`, `/docs`);
-  generated editorial imagery with documented provenance; self-hosted, subset fonts with
-  metric-matched fallbacks.
-- Public `/demo`: fictional repo, real pipeline in the browser, full scan → inspect → fix →
-  rescan → resolved loop, alternate decisions with required reasons.
-- Scanner: `SimilarityProvider` seam, static-corpus provider, portable `runScanPipeline`, line-
-  range evidence, bounded excerpts, bands, per-finding coverage, SPDX expression handling,
-  tree-sitter path through the same seam.
-- Resolution history: migration `20260921000500` (tracked findings, append-only resolutions,
-  owner-checked user actions, service-role scan reconciliation with an explicit re-check
-  contract).
-- App: dashboard ("Your codebase today"), findings queue, question-led finding page with actions,
-  history, evidence export with history and coverage.
-- Billing: centralized plans (Free / Pro $49 / Team $199 / Diligence Pack / Enterprise);
-  subscriptions fail closed without Price IDs; APEX $19 SKU separated and operator-only; plan
-  derived from verified webhooks.
-- Lattice seed regenerated through the real pipeline, with all three resolution outcomes.
-- Tests: scanner/pipeline/providers, SPDX, PGlite database tests (RLS, functions, append-only,
-  seed), plan config, plan derivation, resolution model, vocabulary, evidence mapping, demo
-  walkthrough, homepage/pricing content guards.
+PoryGen is now a working public MVP on **https://porygen.vercel.app**.
 
-## Earlier (still true)
+The real customer path is:
 
-- Supabase Auth, RLS on every table, security-advisor-clean (before this migration).
-- Real GitHub ingestion with an SSRF-safe boundary; npm/PyPI license lookups; CycloneDX SBOM.
-- Stripe webhook verification and idempotency; `create-checkout` fails closed without keys.
-- VS Code extension: compiles, classifier tested.
+```
+/scan
+→ paste public GitHub repo
+→ Scan
+→ real result
+→ evidence
+→ review / dismiss
+→ rescan
+```
 
-## Blockers (credentials, not code)
+### Shipped
 
-- Stripe sandbox keys and subscription Price IDs; `APEX_CUSTOMER_ID`.
-- `GITHUB_TOKEN` (unauthenticated GitHub API is rate-limited).
-- A sales contact address (`VITE_SALES_EMAIL`).
+- Public no-account scanner at `/scan`.
+- Vercel serverless scan endpoint at `api/scan.mjs`.
+- Source Search V2 wired into production.
+- Public GitHub repository ingestion.
+- JavaScript / TypeScript / Python support.
+- Latest default-branch commit pinning.
+- Bounded source fetching through GitHub REST + raw.githubusercontent.com.
+- Reference index bundled into the Vercel function.
+- Strong / possible-common / abstention reporting.
+- Source-specific evidence required for strong findings.
+- Commit-pinned source links, exact line ranges, excerpts, and license metadata.
+- Partial-scan disclosure.
+- Review, dismiss, reopen, and rescan actions.
+- Browser-local decision persistence.
+- Safe rescan resolution.
+- SPA deep-link fixes.
+- Main build/deploy green.
 
-## Deploy checklist for this branch
+### Human-style production checks
 
-1. `supabase db push` (resolution-history migration).
-2. `supabase functions deploy scan-repository create-checkout stripe-webhook billing-diagnostics`.
-3. Optional: apply `scripts/lattice-seed.sql` with service-role access.
-4. `npm run build && node scripts/deploy-worker-assets.mjs`.
-5. Run the Supabase security advisor again (two new `security definer` functions — both set
-   `search_path = ''` and have narrowed grants).
+Real live scans completed successfully for:
 
-## Out of scope (documented, not built)
+- `sindresorhus/yocto-queue`
+- `psf/requests`
+- `expressjs/cors`
 
-Continuous PR/push monitoring, private repositories, GitHub checks, team features, plan
-enforcement, additional similarity providers, async worker, Sigstore signing, Marketplace
-packaging of the VS Code extension.
+Observed scan times were about 1–3 seconds for those examples.
+
+### Current reference coverage
+
+The V2 index contains 6 pinned files from:
+
+- `sindresorhus/yocto-queue`
+- `date-fns/date-fns`
+- `psf/requests`
+
+This remains the biggest product limitation. The engine is live; the source universe is still small.
+
+## Current MVP boundaries
+
+- public GitHub repositories only;
+- JS / TS / Python only;
+- 40 files maximum;
+- 100 KB maximum per file;
+- 750 KB maximum source per scan;
+- review/dismiss state is browser-local;
+- no private repositories;
+- no GitHub App;
+- no automatic push/PR scans;
+- no customer billing enforcement;
+- no broad source corpus;
+- no async large-repository worker.
+
+## Next
+
+See [ROADMAP.md](ROADMAP.md).
+
+Immediate focus:
+
+1. harden the public endpoint and operational setup;
+2. add GitHub App + durable state/private repo support;
+3. broaden source coverage;
+4. scale scans;
+5. automate push/PR checks;
+6. monetize repo expansion through Stripe + APEX.
+
+Do not resume open-ended matcher research unless real production scans expose a specific failure.

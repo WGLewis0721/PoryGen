@@ -1,128 +1,232 @@
 # Scanner
 
-The scanner is an engine inside the product, not the product. Everything here can be improved
-or replaced — normalizer, fingerprinting parameters, providers, corpora — without changing what
-a customer does with a finding.
+## Live scanner
 
-## Pipeline
+The production MVP scanner is Source Search V2, exposed through `POST /api/scan`.
 
-`packages/provenance-core/src/scanner/pipeline.ts` — `runScanPipeline(input)`:
+The main implementation lives under:
 
 ```
-index        code files vs. manifests / license files / docs
-normalize    lexical (default) or tree-sitter tokens per code file
-fingerprint  Winnowing over normalized tokens
-compare      discover → compare through each SimilarityProvider, band each match
-licenses     license files + dependency manifests, registry lookups, SPDX policy
-findings     drafts with finding_key, band, severity, evidence, excerpts, remediation
-summary      coverage, providersRun, checkedPaths, ingestedPaths, manifestsChecked,
-             evaluatedFindingTypes, findingsTruncated, per-file similarity counts, SBOM
+labs/source-search-lab/
+  lib/github-source.mjs
+  lib/scan-service.mjs
+  lib/search.mjs
+  data/reference-index.json
 ```
 
-It is runtime-agnostic (browser, Node, Deno). `onPhase` callbacks let the caller persist
-progress; `scan-repository` writes each phase to `scans.status`. Ingestion and persistence stay
-with the caller.
+The current location is historical: the engine was validated as an isolated lab before being wired into production. Once the public MVP stabilizes, these modules should move into a production package without changing behavior.
 
-Callers today: the `scan-repository` Edge Function (vendored copy under `_shared/`, regenerated
-by `scripts/sync-vendored-copies.mjs`), the public `/demo` (in the browser), the Lattice seed
-generator, and the test suite (including a tree-sitter run).
+## Request flow
 
-## Normalization
+```
+repository URL
+  → validate github.com URL
+  → resolve latest default-branch commit
+  → fetch recursive Git tree
+  → choose supported source files
+  → fetch source text
+  → tokenize
+  → fingerprint
+  → retrieve candidates
+  → verify candidates
+  → report strong / possible-common / abstain
+```
 
-- **Lexical** (`lexicalNormalize.ts`) — dependency-free tokenizer. Comments and literal values
-  vanish, non-keyword identifiers collapse to `ID`, keywords and punctuation survive. Renaming
-  or reformatting doesn't change the token stream. Runs everywhere, including the Edge Function.
-- **Tree-sitter** (`treeSitterNormalize.ts`) — real `web-tree-sitter` grammars for JavaScript,
-  TypeScript, and Python; named syntax nodes become tokens. Node-only (reads WASM grammars from
-  disk). This is the preferred path for a worker, CI, or local run — `pipeline.test.ts` runs the
-  full pipeline and the reference provider on it.
+The engine never executes repository code.
 
-Providers fingerprint their candidates with the same normalizer as the probe, so the two paths
-never compare unlike token streams.
+## Supported languages
 
-**Why lexical on the edge:** bundling tree-sitter's WASM runtime and grammars (0.5–2.3 MB each)
-into a cold-start-sensitive Deno function wasn't worth it for a 40-file scan. The swap is
-contained: pass a different `normalizer` to `runScanPipeline`.
+- JavaScript
+- TypeScript
+- Python
 
-## Winnowing
+JS and TS are treated as compatible for candidate matching. Python is compared within the Python language family.
 
-`winnow.ts` implements Schleimer, Wilkerson & Aiken (2003): FNV-1a hashes of `k = 5` token
-k-grams, then the minimum hash in each window of `w = 4` (rightmost on ties). Any shared run of
-`k + w − 1 = 8` tokens is guaranteed to produce a shared fingerprint.
+## Token representations
 
-`similarity.ts` maps shared fingerprints back to **line ranges on both sides** (each
-fingerprint's k-gram spans known token lines), merges adjacent ranges, and computes
-**containment** = shared ÷ candidate fingerprints.
+The engine uses two representations.
 
-## Bands and thresholds
+### Preserving
 
-| Band | Rule | Persisted severity |
-|---|---|---|
-| Clear | containment < 55% | not a finding |
-| Common pattern | ≥ 55%, candidate is a known idiom **and** permissively licensed | `info` (never tracked) |
-| Review suggested | 55% – 85% | `review` |
-| Strong source match | ≥ 85% | `review`, or `blocking` when the source's license is strong copyleft |
+Keeps identifier and literal spelling.
 
-Each similarity finding stores `evidence_json`: `band`, `why` (a plain sentence), `provider`
-(id, name, corpus, version, scope, coverage claim), `candidate` (title, license, policy,
-origin), `containment`, fingerprint counts, `probeLines` / `candidateLines`, `probeExcerpt`
-(at most 40 lines / 4,000 characters of the matched region of the scanned file),
-`candidateExcerpt` (only when the provider may redistribute it), and `normalizer`. Legacy keys
-(`corpusEntryId`, `corpusEntryLicense`, `note`) are kept for older readers.
+Examples include:
 
-The product never says "copied" or "stolen"; the words are *strong source match*, *possible
-source match*, and *review suggested*.
+- `id:Queue`
+- `id:#head`
+- `lit:"safe"`
 
-## Providers and coverage
+This representation provides source-specific evidence.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md#similarity-providers) for the interface.
+### Normalized
 
-| Provider | Scope | Status |
-|---|---|---|
-| `porygen-reference-corpus` | 4 original reference implementations (debounce, deepClone, quicksort, withRetry), each with an assigned reference license, v2026.1 | **Live — the only provider in real scans** |
-| `sample-corpus` | 3 fictional "public" files for `/demo` | Demo only |
-| Licensed source corpora | Large licensed bodies of public source | Planned |
-| Commercial source intelligence | SCANOSS-class services | Planned |
-| GitHub candidate discovery | Candidate search over public repositories, then precise comparison | Planned |
-| Private corpus | A company's or client's own code | Planned |
+Collapses identifiers and literals while preserving structural tokens.
 
-**What this means honestly:** the matching engine is real and tested; the coverage is a small
-demonstration corpus. A clear result today means "nothing matched PoryGen's reference corpus",
-not "this code is original". Marketing copy says "checks against known reference source" and
-explicitly never claims an internet-wide search. The reference entries are original code written
-for PoryGen, so a match means "structurally similar to this reference", not "resembles a
-specific third-party project". Broader production coverage needs, at minimum: a licensed corpus
-or source-intelligence provider, an index that isn't loaded into memory per request, and the
-async worker described in [ARCHITECTURE.md](ARCHITECTURE.md#evolving-the-scanner).
+This makes candidate retrieval robust to renaming, formatting, and some literal changes.
 
-## Resolution contract
+Normalized structure is useful for **finding candidates** but is not sufficient by itself for a strong customer-facing source attribution.
 
-`sync_tracked_findings` (see [DATA_MODEL.md](DATA_MODEL.md)) resolves a tracked finding only when
-the new scan **provably re-checked it**:
+## Fingerprinting and retrieval
 
-- similarity finding — its file is in `summary.checkedPaths` **and** its provider is in
-  `summary.providersRun` (a provider swap never resolves old findings);
-- dependency license finding — dependency manifests were evaluated (`manifestsChecked`);
-- license-file finding — the file is in `ingestedPaths`;
-- any file finding — or the scanner reports the file is gone from a *complete* repository tree;
-- never from a scan with `findingsTruncated: true`, and never for types the scan didn't evaluate.
+Current settings are stored with the reference index.
 
-This is why the pipeline records those summary fields, and why actionable findings are never
-capped below 200 per scan.
+Key defaults:
 
-## License scanner
+- 7-token shingles;
+- Winnowing window 4;
+- 120-token regions;
+- 60-token region stride;
+- 20-candidate shortlist per region.
 
-`license.ts` detects license files by text signature and parses `package.json`,
-`requirements.txt`, `go.mod`, and `Cargo.toml`. Registry lookups (npm, PyPI) resolve SPDX
-expressions — `(MIT OR Apache-2.0)` takes the most permissive known option, `AND` takes the most
-restrictive, `-only` / `-or-later` suffixes are stripped — plus npm license objects and PyPI
-trove classifiers. Policy: permissive → CLEAR, weak copyleft → REVIEW, strong copyleft →
-BLOCKING, unrecognised → UNKNOWN (surfaced as "License unknown", review suggested).
+The inverted index maps fingerprint hashes to candidate documents.
+
+Corpus-common fingerprints are downweighted.
+
+Each query fingerprint contributes at most once to a candidate retrieval score so repeated occurrences cannot artificially inflate ranking.
+
+## Verification
+
+Candidates are verified using ordered token matching and longest contiguous spans.
+
+Evidence includes:
+
+- matched token count;
+- longest contiguous matched run;
+- customer-region coverage;
+- source-region coverage;
+- customer line range;
+- source line range;
+- excerpts.
+
+## Reporting gate
+
+The engine separates **retrieval confidence** from **reporting confidence**.
+
+A strong match requires all of the following kinds of support:
+
+- substantial normalized structural overlap;
+- sufficient ordered/contiguous overlap;
+- sufficient smaller-side coverage;
+- low enough corpus-common evidence;
+- meaningful source-specific evidence.
+
+Source-specific evidence comes from preserving-token overlap and/or rare preserving fingerprints.
+
+This prevents ordinary same-shape implementations from becoming strong attributions.
+
+### Outcomes
+
+**Strong match**  
+The evidence is specific enough to surface the public source for review.
+
+**Possible / common pattern**  
+There is meaningful similarity, but the evidence may be explained by ordinary structure or insufficiently unique code.
+
+**Insufficient evidence / abstention**  
+Nothing is specific enough to justify naming a source.
+
+Multiple public sources may independently earn strong status. The engine does not force one winner.
+
+## Duplicate evidence
+
+Overlapping customer regions that identify the same public source are collapsed into one coherent finding rather than repeated customer-facing cards.
+
+## Reference corpus
+
+The live index currently contains 6 pinned files from 3 public repositories:
+
+| Repository | Language |
+|---|---|
+| `sindresorhus/yocto-queue` | JavaScript |
+| `date-fns/date-fns` | TypeScript |
+| `psf/requests` | Python |
+
+Every entry is pinned to a commit and has source/license metadata.
+
+This is intentionally small MVP coverage.
+
+A clean result means:
+
+> no sufficiently specific match was found in this index.
+
+It does not mean:
+
+> the code is original.
+
+## GitHub ingestion
+
+`github-source.mjs` accepts only public HTTPS GitHub repository URLs.
+
+It uses GitHub REST for:
+
+- repository metadata;
+- default-branch commit;
+- recursive tree.
+
+Source content is fetched from `raw.githubusercontent.com`, which avoids consuming one REST API request per source file.
+
+A configured server-side `GITHUB_TOKEN` increases GitHub REST capacity.
 
 ## Limits
 
-- 40 files, 200 KB per file, 2 MB per scan on the edge; vendor/build directories skipped.
-- Public GitHub repositories only (private needs the planned GitHub App).
-- Lockfiles are recognised but not parsed for the transitive tree; direct dependencies only.
-- Text source only; no binaries.
-- Unknown-language files are tokenized without keyword awareness (weaker signal).
+Current production limits:
+
+- 40 fetched supported files;
+- 100 KB per file;
+- 750 KB total source;
+- 15-second fetch budget;
+- up to 40 detailed skip records.
+
+Excluded directory names include common vendor, build, generated, virtual-environment, and dependency directories.
+
+## Completeness
+
+Completeness accounting is separate from the visible skipped-file list.
+
+Incomplete reasons include:
+
+- file too large;
+- decoded file too large;
+- provider/download failure;
+- time limit;
+- file limit;
+- total-byte limit.
+
+The UI shows a partial-scan warning when appropriate.
+
+## Safe rescan resolution
+
+The public scanner can compare the previous browser-stored scan with a new scan.
+
+A previous finding only counts as resolved when:
+
+- its file was successfully rechecked; or
+- the new Git tree is complete and proves the file no longer exists.
+
+If a partial scan simply did not reach the file, PoryGen does not claim it was fixed.
+
+## Privacy behavior
+
+The public request path is POST-only and uses no-store responses.
+
+Customer source is fetched for the scan and held transiently in request memory. The public MVP does not persist source files or findings server-side.
+
+The browser may store the last scan response and review/dismiss decisions in local storage for that repository.
+
+## Validation status
+
+The V2 engine has regression coverage for retrieval, reporting, completeness, rescan safety, tokenizer edge cases, index freshness, and a live GitHub fixture.
+
+The product is now in the phase where real user behavior should drive matcher changes. Do not reopen open-ended threshold research unless production use exposes a concrete failure.
+
+## Future scanner work
+
+See [ROADMAP.md](../ROADMAP.md).
+
+The important next technical steps are:
+
+1. expand source coverage;
+2. move stable production code out of `labs/`;
+3. support durable connected-repo state;
+4. add async workers for larger repositories;
+5. add automatic GitHub change scanning.
