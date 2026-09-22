@@ -123,7 +123,7 @@ A small pinned V2 reference set is also retained for documented fixtures/regress
 - production serves only a subset of the existing offline corpus;
 - GitHub review/dismiss history is browser-local;
 - uploaded-project results intentionally disappear when the page/session is gone;
-- no durable Source Match Report yet;
+- Source Match Report exports are local HTML snapshots; no hosted report history or private sharing yet;
 - no MCP server;
 - no CLI;
 - no GitHub App;
@@ -174,7 +174,7 @@ Delivered:
 
 ## Phase 2 — Source Match Report
 
-**Status: NEXT**
+**Status: IMPLEMENTED — downloadable HTML, printable to PDF**
 
 **Goal:** Turn one completed scan into a clean artifact that answers the source-match question without forcing someone to re-read the scan UI.
 
@@ -182,25 +182,25 @@ The name is **Source Match Report**, not “compliance report,” “originality
 
 ### Report contents
 
-- [ ] project/source label and scan timestamp;
-- [ ] what input was scanned;
-- [ ] coverage and completeness;
-- [ ] strong findings;
-- [ ] possible/common findings where useful;
-- [ ] affected file and matched lines;
-- [ ] possible public source;
-- [ ] source/license/version metadata already known by the Engine;
-- [ ] side-by-side or compact evidence;
-- [ ] exclusions;
-- [ ] dismissed/reviewed findings and notes where available;
-- [ ] explicit limitations: indexed-source coverage, not proof of copying/originality, not legal advice.
+- [x] project/source label and scan timestamp;
+- [x] what input was scanned;
+- [x] coverage and completeness;
+- [x] strong findings;
+- [x] possible/common findings where useful;
+- [x] affected file and matched lines;
+- [x] possible public source;
+- [x] source/license/version metadata already known by the Engine;
+- [x] side-by-side or compact evidence;
+- [x] exclusions;
+- [x] dismissed/reviewed findings and notes where available;
+- [x] explicit limitations: indexed-source coverage, not proof of copying/originality, not legal advice.
 
 ### Privacy rules
 
-- [ ] Do not persist uploaded source merely to create a report.
-- [ ] Prefer a downloadable/exportable report first.
+- [x] Do not persist uploaded source merely to create a report.
+- [x] Prefer a downloadable/exportable report first.
 - [ ] If private sharing is later added, persist only what is deliberately required and make the retention boundary explicit.
-- [ ] Do not call the output a certificate.
+- [x] Do not call the output a certificate.
 
 ### Exit criterion
 

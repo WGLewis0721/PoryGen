@@ -131,7 +131,7 @@ No customer code is sent to a runtime LLM.
 
 ## What is next
 
-The next net-new product addition is the **Source Match Report**: a clean exportable artifact showing what matched, where it matched, the evidence, coverage and exclusions.
+**Source Match Report** is available after a completed public, ZIP, or folder scan. Choose **Download Source Match Report** for a self-contained HTML artifact; open it and print to PDF if needed. It includes source metadata, compact evidence, coverage, exclusions, and current review/dismissal decisions. Export runs locally without storing uploaded source on the server. The downloaded file contains excerpts; share it deliberately. See [report behavior](docs/SOURCE_MATCH_REPORT.md).
 
 The net-new sequence after that is:
 

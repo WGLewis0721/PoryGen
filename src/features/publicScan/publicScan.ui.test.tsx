@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { TERMS_VERSION } from "../legal/termsAcceptance";
+import { reportFixture } from "./reportFixture";
+import * as reports from "./sourceMatchReport";
 import { PublicScanPage } from "./PublicScanPage";
 
 const terms = { version: TERMS_VERSION, acceptedAt: "2026-09-22T12:00:00.000Z" };
@@ -32,6 +34,19 @@ afterEach(() => {
 });
 
 describe("public scan page", () => {
+  it("exports the completed scan with the latest dismissal, without another request", async () => {
+    const result = reportFixture();
+    const fetchMock = vi.fn(() => jsonResponse(result));
+    vi.stubGlobal("fetch", fetchMock);
+    const download = vi.spyOn(reports, "downloadSourceMatchReport").mockImplementation(() => {});
+    renderScan("/scan?repo=owner/project");
+    const button = await screen.findByRole("button", { name: "Download Source Match Report" });
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(button);
+    expect(download).toHaveBeenCalledWith(result, { match1: expect.objectContaining({ status: "dismissed", reason: "Common pattern, not a concern" }) }, expect.objectContaining({ label: "owner/project", completedAt: expect.any(String) }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("still posts the existing GitHub request", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
