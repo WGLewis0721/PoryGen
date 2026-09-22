@@ -1,88 +1,129 @@
 # Security
 
-## Live public scanner
+## Live scan boundary
 
-The MVP scan path is intentionally narrow.
+POST /api/scan accepts exactly one supported source representation:
 
-`POST /api/scan` accepts a public GitHub repository URL and runs server-side on Vercel.
+- public GitHub repository;
+- uploaded ZIP;
+- browser-selected project files.
 
-The scanner:
+All inputs converge on the same scanner. Customer code is analyzed, not executed.
 
-- accepts only HTTPS `github.com/<owner>/<repo>` URLs;
-- validates owner/repository names;
-- contacts only GitHub API and raw GitHub hosts for source ingestion;
-- never executes repository code;
-- never runs package installation, builds, scripts, or shell commands from the repository;
-- returns no-store responses.
+Responses use Cache-Control: no-store.
 
-## Server-side GitHub credential
+## GitHub ingestion
 
-`GITHUB_TOKEN` is a server-side production secret.
+The GitHub path:
 
-It is used only to increase GitHub REST API capacity and is not bundled into the browser.
+- accepts validated public GitHub repository references;
+- constructs approved GitHub API/raw-content URLs server-side;
+- never executes repository scripts;
+- never runs package installation/build/shell commands.
 
-The token should remain minimum-scope and should be rotated if exposed outside the secret store.
+GITHUB_TOKEN is a server-side capacity credential only and must never reach browser code or documentation.
 
-## Ingestion limits
+## ZIP/folder ingestion
 
-Current public-scan limits:
+Upload security is defense-in-depth.
 
-- 40 supported files;
-- 100 KB per file;
-- 750 KB total source;
-- bounded fetch duration;
-- build/vendor/generated/dependency directories excluded.
+The server enforces:
 
-The scanner tracks incompleteness explicitly and shows partial-scan warnings.
+- bounded JSON request size;
+- 2.9 MB compressed ZIP limit;
+- 1,000 archive-entry limit;
+- 10 MB declared/expanded archive budget;
+- 100 KB/source file;
+- 150 matched files;
+- 2 MB accepted source;
+- safe relative paths;
+- no traversal/absolute paths;
+- no symlinks/devices/special entries;
+- duplicate/overlap/integrity rejection;
+- suspicious compression rejection;
+- bounded worker time/concurrency;
+- no recursive nested-archive extraction;
+- binary/invalid UTF-8 skipping;
+- dependency/vendor/build/generated filtering.
 
-## Public-scan retention
+The detailed contract is [ZIP_SCAN_API.md](ZIP_SCAN_API.md).
 
-The live public scanner fetches source for analysis in request memory.
+Client-side checks improve UX; server-side validation is authoritative.
 
-The public MVP does not persist customer repository contents, scan findings, or source excerpts server-side.
+## Source execution
 
-The browser stores the most recent scan result and review/dismiss decisions in local storage so the anonymous user can rescan and preserve decisions on that browser.
+PoryGen does not:
 
-No customer code is sent to a runtime LLM.
+- execute uploaded or fetched code;
+- install customer dependencies;
+- run customer builds/tests/scripts;
+- evaluate customer source with eval or a shell;
+- send customer code to a runtime LLM.
 
-## Source reference data
+## Retention
 
-The V2 reference index is prebuilt and bundled into the Vercel function.
+### Server
 
-A customer scan does not crawl the web or build a new reference corpus.
+Customer source is held transiently for the scan.
 
-## Authenticated application security
+The live anonymous scan path does not intentionally persist ZIP/folder source or uploaded scan results in a database/object store/cache.
 
-The repository also contains the earlier Supabase-authenticated application.
+### Browser
 
-That stack uses Row Level Security and includes persistent repositories, scans, findings, tracked findings, resolution history, and billing tables.
+Public GitHub results/review decisions may be stored in localStorage to support manual rescan/history on that browser.
 
-Those controls remain relevant for the future connected/private-repository product, but they are not required for the current anonymous `/scan` flow.
+ZIP/folder source, excerpts and complete upload scan results must not be written to localStorage/sessionStorage.
 
-When durable user state is reintroduced into the primary experience, server-authoritative scan writes and the existing RLS tests should remain mandatory.
+A future Source Match Report must not weaken this boundary merely for convenience. If private sharing later requires persistence, retention must be deliberate and disclosed.
+
+## Source reference corpus
+
+Reference source is prepared independently of customer requests.
+
+A customer scan does not crawl the web or build a new corpus.
+
+Production currently serves a 1,000-file canonical package-source pack from 199 popular npm/PyPI packages, plus the small pinned V2 fixture/reference set.
+
+Coverage remains limited and must be disclosed.
 
 ## Resolution integrity
 
-The public scanner's browser-side resolution helper follows the same conservative rule as the V2 lab:
+A GitHub finding that disappears is only resolved when its file was actually rechecked or a complete tree proves deletion.
 
-A finding that disappears is only considered resolved when the affected file was successfully rechecked, or a complete Git tree confirms deletion.
+A file that is intentionally excluded is not resolved.
 
-A partial scan cannot resolve a finding merely because it failed to revisit the file.
+Uploads have treeComplete=false because a manual selection cannot prove deletion from the actual project.
 
-## Current security priorities
+## Authenticated application groundwork
 
-Before broad public or paid launch:
+Older Supabase Auth/Postgres/RLS/history/billing code remains in the repository for later durable/connected features.
 
-1. keep production secrets only in Vercel/server-side secret stores;
-2. rotate any credential that has been pasted into non-secret communication;
-3. add abuse/rate-limit controls for the anonymous scan endpoint;
-4. add operational monitoring for GitHub quota and serverless failures;
-5. publish Privacy Policy and Terms;
-6. keep the repository private before adding materially more proprietary scanner intelligence;
-7. preserve the no-source-retention design as features evolve.
+When durable state becomes primary:
+
+- server-authoritative writes remain mandatory;
+- RLS boundaries must remain tested;
+- account state must not become a prerequisite for the first useful scan.
+
+## Current priorities
+
+Continue in parallel with product work:
+
+1. abuse/rate limiting;
+2. operational monitoring;
+3. canonical Privacy/data-handling statement;
+4. secret hygiene/credential rotation;
+5. counsel review before meaningful paid usage;
+6. repository privacy before adding materially deeper proprietary Engine logic;
+7. preserve transient-source behavior unless a deliberate product feature requires otherwise.
 
 ## Claims
 
-PoryGen does not claim that a scan proves originality, copying, or AI authorship.
+PoryGen does not claim that a scan proves:
 
-A clean result is bounded by the sources and files actually checked.
+- originality;
+- copying;
+- infringement;
+- license compliance;
+- AI authorship.
+
+A result is bounded by the sources and files actually checked.
