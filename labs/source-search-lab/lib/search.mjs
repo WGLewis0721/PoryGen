@@ -42,6 +42,15 @@ export const DEFAULT_SETTINGS = Object.freeze({
   possibleContiguousTokens: 7,
   possibleSmallerCoverage: 0.35,
   commonFingerprintRatio: 0.60,
+  strongCommonFingerprintRatio: 0.75,
+  // Source-specific evidence required on top of normalized structural overlap
+  // before a candidate is allowed to become a customer-facing strong match.
+  // Any one of these being met is enough: an exact identifier/literal-preserving
+  // token match, a preserving-token contiguous run, or a handful of rare
+  // preserving fingerprints (7-token shingles that survived exact spelling).
+  minPreservingMatchedTokens: 18,
+  minPreservingContiguousTokens: 9,
+  minRarePreservingFingerprintMatches: 3,
 });
 
 export function detectLanguage(path) {
@@ -304,6 +313,8 @@ export function retrieveCandidates(region, index, settings = DEFAULT_SETTINGS) {
             normalizedScore: 0,
             matchedHashes: 0,
             commonHashes: 0,
+            preservingMatchedHashes: 0,
+            preservingRareMatchedHashes: 0,
             positions: { preserving: [], normalized: [] },
           };
           candidates.set(docId, candidate);
@@ -315,6 +326,10 @@ export function retrieveCandidates(region, index, settings = DEFAULT_SETTINGS) {
         candidate[`${representation}Score`] += weight;
         candidate.matchedHashes += 1;
         if (commonRatio >= settings.commonFingerprintRatio) candidate.commonHashes += 1;
+        if (representation === "preserving") {
+          candidate.preservingMatchedHashes += 1;
+          if (commonRatio < settings.commonFingerprintRatio) candidate.preservingRareMatchedHashes += 1;
+        }
         candidate.positions[representation].push(...positions);
       }
     }
@@ -402,10 +417,20 @@ function lineRange(tokens, start, length) {
   return { start: first.line, end: last.line };
 }
 
+// Keywords and punctuation are shared by nearly all code in a language; matching
+// them proves nothing about a specific source. Only identifier and literal tokens
+// (preserving representation) carry the developer's actual lexical choices, so
+// evidence built from them is what can specifically tie a region to one source.
+function specificTokens(preservingTokens) {
+  return preservingTokens.filter((token) => token.kind.startsWith("id:") || token.kind.startsWith("lit:"));
+}
+
 export function verifyCandidate(region, candidate, document, settings = DEFAULT_SETTINGS) {
   const span = candidateSpan(candidate, document, settings);
   const candidateTokens = document.tokens.normalized.slice(span.start, span.end);
+  const candidatePreservingTokens = document.tokens.preserving.slice(span.start, span.end);
   const queryTokens = region.normalized;
+  const queryPreservingTokens = region.preserving;
 
   const matchedTokens = lcsLength(queryTokens, candidateTokens);
   const contiguous = longestCommonContiguous(queryTokens, candidateTokens);
@@ -413,14 +438,37 @@ export function verifyCandidate(region, candidate, document, settings = DEFAULT_
   const sourceCoverage = candidateTokens.length === 0 ? 0 : matchedTokens / candidateTokens.length;
   const smallerCoverage = matchedTokens / Math.max(1, Math.min(queryTokens.length, candidateTokens.length));
 
+  // Structural overlap (matchedTokens/contiguous above) is computed on identifier-
+  // normalized tokens, so it is satisfied by any two pieces of code with the same
+  // shape, including generic boilerplate. Specific evidence instead compares only
+  // the identifier and literal tokens (exact spelling), which is what actually
+  // ties a customer region to *this* public source rather than to structure
+  // shared by many implementations.
+  const querySpecific = specificTokens(queryPreservingTokens);
+  const candidateSpecific = specificTokens(candidatePreservingTokens);
+  const preservingMatchedTokens = lcsLength(querySpecific, candidateSpecific);
+  const preservingContiguous = longestCommonContiguous(querySpecific, candidateSpecific);
+  const rarePreservingFingerprintMatches = candidate.preservingRareMatchedHashes ?? 0;
+
   const customerMatchLines = lineRange(queryTokens, contiguous.aStart, contiguous.length);
   const sourceMatchLines = lineRange(candidateTokens, contiguous.bStart, contiguous.length);
 
-  const strong =
+  const structuralEvidence =
     matchedTokens >= settings.minMatchedTokens &&
     contiguous.length >= settings.minContiguousTokens &&
-    smallerCoverage >= settings.minSmallerCoverage &&
-    candidate.commonFingerprintRatio < 0.75;
+    smallerCoverage >= settings.minSmallerCoverage;
+
+  const specificEvidence =
+    preservingMatchedTokens >= settings.minPreservingMatchedTokens ||
+    preservingContiguous.length >= settings.minPreservingContiguousTokens ||
+    rarePreservingFingerprintMatches >= settings.minRarePreservingFingerprintMatches;
+
+  const lowCorpusCommonality = candidate.commonFingerprintRatio < settings.strongCommonFingerprintRatio;
+
+  // Normalized structural similarity alone is never enough: a candidate only
+  // earns "strong_match" when it also carries source-specific (preserving) evidence
+  // and is not dominated by fingerprints that are common across the indexed corpus.
+  const strong = structuralEvidence && specificEvidence && lowCorpusCommonality;
 
   const possible =
     matchedTokens >= settings.possibleMatchedTokens &&
@@ -431,6 +479,9 @@ export function verifyCandidate(region, candidate, document, settings = DEFAULT_
     classification: strong ? "strong_match" : possible ? "possible_common_pattern" : "insufficient_evidence",
     matchedTokens,
     contiguousTokens: contiguous.length,
+    preservingMatchedTokens,
+    preservingContiguousTokens: preservingContiguous.length,
+    rarePreservingFingerprintMatches,
     customerCoverage,
     sourceCoverage,
     smallerCoverage,
@@ -477,6 +528,11 @@ export function scanSourceFiles(files, index, settings = DEFAULT_SETTINGS) {
       continue;
     }
 
+    // Retrieval stays broad: every shortlisted candidate is verified. Reporting
+    // stays conservative: each candidate document earns its own classification
+    // independently, so a file can legitimately show zero, one, or several
+    // strong matches to different public sources.
+
     for (const region of regions) {
       try {
         const candidates = retrieveCandidates(region, index, settings);
@@ -513,8 +569,8 @@ export function scanSourceFiles(files, index, settings = DEFAULT_SETTINGS) {
             },
             explanation:
               evidence.classification === "strong_match"
-                ? "Strong similarity evidence inside this lab's indexed sources. This is not proof of copying or AI authorship."
-                : "Possible similarity or a common implementation pattern. Review the source before drawing conclusions.",
+                ? "Source-specific evidence is substantial enough to justify surfacing this public source for review. This is not proof of copying or AI authorship."
+                : "There is meaningful similarity, but it may be explained by common implementation structure or insufficiently unique evidence.",
           };
 
           const previous = bestBySource.get(record.id);
@@ -539,7 +595,7 @@ export function scanSourceFiles(files, index, settings = DEFAULT_SETTINGS) {
           excerpt: "",
         },
         publicSource: null,
-        explanation: "Nothing sufficiently strong was found in the indexed sources. This does not prove the code is original.",
+        explanation: "No sufficiently specific source match found in the indexed corpus. This does not prove the code is original.",
       });
     } else {
       findings.push(...bestBySource.values());

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "builtAt": "2026-09-22T00:46:00.000Z",
+  "builtAt": "2026-09-22T02:55:43.289Z",
   "settings": {
     "shingleSize": 7,
     "winnowWindow": 4,
@@ -13,7 +13,11 @@
     "possibleMatchedTokens": 12,
     "possibleContiguousTokens": 7,
     "possibleSmallerCoverage": 0.35,
-    "commonFingerprintRatio": 0.6
+    "commonFingerprintRatio": 0.6,
+    "strongCommonFingerprintRatio": 0.75,
+    "minPreservingMatchedTokens": 18,
+    "minPreservingContiguousTokens": 9,
+    "minRarePreservingFingerprintMatches": 3
   },
   "coverage": {
     "repositories": [

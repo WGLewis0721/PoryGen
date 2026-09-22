@@ -294,6 +294,162 @@ test("verification reports both customer and source coverage separately", () => 
 });
 
 
+test("literal-only changes still recover the source while identifiers carry the specific evidence", () => {
+  const indexedSource = `
+export function isValidCode(code) {
+  if (code === "LEGACY_MODE") {
+    return true;
+  }
+  if (code.length > 42) {
+    return false;
+  }
+  return code === "DEFAULT";
+}
+`;
+  const literalChanged = indexedSource
+    .replaceAll("LEGACY_MODE", "COMPAT_MODE")
+    .replaceAll("42", "99")
+    .replaceAll("DEFAULT", "STANDARD");
+  const padding1 = "export function padOne(a,b,c){ if(a>b){return c;} return a+b+c; }";
+  const padding2 = "export function padTwo(x,y){ while(x<y){ x+=1; } return x; }";
+  const literalIndex = buildReferenceIndex([
+    { id: "valid", repository: "example/valid", commit: "1".repeat(40), path: "valid.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/valid", source: indexedSource },
+    { id: "pad1", repository: "example/pad1", commit: "2".repeat(40), path: "pad1.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/pad1", source: padding1 },
+    { id: "pad2", repository: "example/pad2", commit: "3".repeat(40), path: "pad2.js", language: "typescript", license: "MIT", sourceUrl: "https://example.test/pad2", source: padding2 },
+  ]);
+
+  const { findings } = scanSourceFiles([{ path: "literal-changed.js", language: "javascript", source: literalChanged }], literalIndex);
+  const match = findings.find((finding) => finding.publicSource?.path === "valid.js");
+
+  assert.ok(match, "expected literal-only changes to still recover the source");
+  assert.equal(match.classification, "strong_match");
+});
+
+test("independently written implementation of the same algorithm does not attribute to an unrelated source", () => {
+  const indexedSource = `
+export function factorialIterative(n) {
+  let result = 1;
+  for (let i = 2; i <= n; i++) {
+    result *= i;
+  }
+  return result;
+}
+`;
+  const independentSource = `
+export function factorial(value) {
+  if (value <= 1) {
+    return 1;
+  }
+  return value * factorial(value - 1);
+}
+`;
+  const factorialIndex = buildReferenceIndex([
+    { id: "fact", repository: "example/fact", commit: "1".repeat(40), path: "fact.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/fact", source: indexedSource },
+  ]);
+
+  const { findings } = scanSourceFiles([{ path: "independent.js", language: "javascript", source: independentSource }], factorialIndex);
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].classification, "insufficient_evidence");
+});
+
+test("normalized-high / preserving-low structural similarity is never reported as a strong match", () => {
+  const indexedSource = `
+export function computeAverage(list) {
+  let total = 0;
+  for (let index = 0; index < list.length; index++) {
+    total += list[index];
+  }
+  return total / list.length;
+}
+`;
+  // Same control-flow shape as the indexed source (so normalized/structural
+  // overlap is high) but every identifier is different: an independently
+  // written implementation, not a copy of this source.
+  const independentSource = `
+export function calculateMean(numbers) {
+  let sum = 0;
+  for (let position = 0; position < numbers.length; position++) {
+    sum += numbers[position];
+  }
+  return sum / numbers.length;
+}
+`;
+  const padding1 = "export function padOne(a,b,c){ if(a>b){return c;} return a+b+c; }";
+  const padding2 = "export function padTwo(x,y){ while(x<y){ x+=1; } return x; }";
+  const averageIndex = buildReferenceIndex([
+    { id: "avg", repository: "example/avg", commit: "1".repeat(40), path: "avg.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/avg", source: indexedSource },
+    { id: "pad1", repository: "example/pad1", commit: "2".repeat(40), path: "pad1.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/pad1", source: padding1 },
+    { id: "pad2", repository: "example/pad2", commit: "3".repeat(40), path: "pad2.js", language: "typescript", license: "MIT", sourceUrl: "https://example.test/pad2", source: padding2 },
+  ]);
+
+  const regions = makeRegions(independentSource, "mean.js", "javascript");
+  const candidates = retrieveCandidates(regions[0], averageIndex);
+  const doc = averageIndex.documents.find((item) => item.id === "avg");
+  const candidate = candidates.find((item) => item.docId === "avg");
+  const evidence = verifyCandidate(regions[0], candidate, doc);
+
+  // The normalized/structural signal alone looks like an exact match...
+  assert.equal(evidence.customerCoverage, 1);
+  assert.equal(evidence.contiguousTokens, evidence.matchedTokens);
+  // ...but it must never be reported as strong without source-specific evidence.
+  assert.notEqual(evidence.classification, "strong_match");
+
+  const { findings } = scanSourceFiles([{ path: "mean.js", language: "javascript", source: independentSource }], averageIndex);
+  assert.equal(findings.some((finding) => finding.classification === "strong_match"), false);
+});
+
+test("overlapping scan windows over the same source collapse into one finding", () => {
+  const part1 = `
+export class TinyQueue {
+  constructor() {
+    this.items = [];
+  }
+  enqueue(value) {
+    this.items.push(value);
+  }
+  dequeue() {
+    if (this.items.length === 0) {
+      return undefined;
+    }
+    return this.items.shift();
+  }
+  peekFront() {
+    return this.items[0];
+  }
+  clearAll() {
+    this.items = [];
+  }
+}
+`;
+  const part2 = `
+export function drainQueue(queue, limit) {
+  const drained = [];
+  while (queue.items.length > 0 && drained.length < limit) {
+    drained.push(queue.dequeue());
+  }
+  return drained;
+}
+`;
+  const bigSource = part1 + part2;
+  const padding1 = "export function padOne(a,b,c){ if(a>b){return c;} return a+b+c; }";
+  const padding2 = "export function padTwo(x,y){ while(x<y){ x+=1; } return x; }";
+  const bigIndex = buildReferenceIndex([
+    { id: "big", repository: "example/big", commit: "1".repeat(40), path: "big.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/big", source: bigSource },
+    { id: "pad1", repository: "example/pad1", commit: "2".repeat(40), path: "pad1.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/pad1", source: padding1 },
+    { id: "pad2", repository: "example/pad2", commit: "3".repeat(40), path: "pad2.js", language: "typescript", license: "MIT", sourceUrl: "https://example.test/pad2", source: padding2 },
+  ]);
+
+  const regions = makeRegions(bigSource, "customer-big.js", "javascript");
+  assert.ok(regions.length >= 2, "expected the fixture to span multiple overlapping scan windows");
+
+  const { findings } = scanSourceFiles([{ path: "customer-big.js", language: "javascript", source: bigSource }], bigIndex);
+  const bigMatches = findings.filter((finding) => finding.publicSource?.path === "big.js");
+
+  assert.equal(bigMatches.length, 1, "overlapping windows over the same source must produce one finding, not one per window");
+  assert.equal(bigMatches[0].classification, "strong_match");
+});
+
 test("Python normalized tokens preserve floor-division and walrus operators", () => {
   const tokens = tokenizeSource("def halve(value):\n    if (half := value // 2):\n        return half\n", "python", {
     normalizeIdentifiers: true,

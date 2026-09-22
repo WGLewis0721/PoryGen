@@ -55,8 +55,7 @@ pre {
 .actions select { min-height: 46px; padding: 0 10px; border: 1px solid #777; background: #fff; }
 .dismissed { opacity: .55; }
 .dismissed-note { font-size: 13px; color: #555; font-style: italic; }
-.insufficient .match-grid, .insufficient .license, .insufficient .actions { display: none; }
-.insufficient .classification { color: #666; }
+.abstention-notice { padding: 20px 0; font-size: 16px; color: #444; }
 .strong_match .classification { color: #7c2d12; }
 .possible_common_pattern .classification { color: #7a5b10; }
 .resolved ul { margin-bottom: 0; }

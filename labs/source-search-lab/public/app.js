@@ -100,11 +100,21 @@ function renderFindings(data) {
     previousScan.repository.name === data.repository.name &&
     previousScan.repository.commit !== data.repository.commit;
 
-  for (const finding of data.findings) {
+  // Abstention is a normal, successful outcome. When nothing in the scan cleared
+  // the reporting gate, show one clear message instead of a grey card per file.
+  const actionableFindings = data.findings.filter((finding) => finding.classification !== "insufficient_evidence");
+  if (actionableFindings.length === 0) {
+    const notice = document.createElement("p");
+    notice.className = "abstention-notice";
+    notice.textContent = "No sufficiently specific source match found in the indexed corpus.";
+    results.appendChild(notice);
+    return;
+  }
+
+  for (const finding of actionableFindings) {
     const fragment = template.content.cloneNode(true);
     const card = fragment.querySelector(".finding");
     card.classList.add(finding.classification);
-    if (finding.classification === "insufficient_evidence") card.classList.add("insufficient");
 
     fragment.querySelector(".classification").textContent = classificationLabel(finding.classification);
     fragment.querySelector(".finding-title").textContent = finding.customer.path;

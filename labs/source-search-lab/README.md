@@ -103,6 +103,34 @@ The index and customer regions each use two representations:
 
 Both are shingled and Winnowed. Candidate lists are combined, with fingerprints appearing in much of the small corpus downweighted. Each region is bounded to roughly 20 candidates before the more expensive ordered comparison.
 
+### Reporting gate
+
+Retrieval stays broad — every shortlisted candidate is verified independently, and a
+file can legitimately produce zero, one, or several findings against different
+public sources. Reporting is deliberately conservative:
+
+- **Structural overlap** (identifier-normalized ordered/contiguous matching tokens
+  and coverage) shows two regions have the same *shape*. Shared shape alone —
+  common loops, common guard clauses, common framework idioms — is true of a huge
+  amount of unrelated code and is never enough by itself to name a source.
+- **Specific evidence** requires the match to survive when identifiers and
+  literals must be spelled exactly the same, or to include a handful of rare
+  7-token fingerprints that are not common across the indexed corpus. This is
+  what actually ties a region to *one* public source rather than to a pattern
+  many sources share.
+- A candidate only becomes a customer-facing **strong match** when it clears the
+  structural bar *and* the specific-evidence bar *and* is not dominated by
+  fingerprints that recur across much of the indexed corpus.
+- Each candidate document is judged independently, so two, three, or more public
+  sources can each earn a strong match on the same file. There is no "only the
+  top candidate can win" rule.
+- Overlapping scan windows that resolve to the same customer region and the same
+  public source collapse into one finding with the best evidence, not one card
+  per window.
+- Normalized structural similarity **alone is never sufficient** for a strong
+  match. A no-match scan — "no sufficiently specific source match found in the
+  indexed corpus" — is a normal, successful result, not a failure.
+
 ### Literal handling
 
 The two representations intentionally treat literals differently:
@@ -132,17 +160,19 @@ The verifier reports:
 
 Starting thresholds are experimental:
 
-- 24 ordered matching tokens;
-- contiguous block of 12 tokens;
-- 60% coverage of the smaller comparison side.
+- structural: 24 ordered matching tokens, a 12-token contiguous block, 60% coverage of the smaller comparison side;
+- specific evidence (identifier/literal-exact): 18 ordered matching tokens, a 9-token contiguous run, or 3 rare preserving fingerprints;
+- a strong match requires both bars plus low corpus-wide commonality.
 
 Those numbers are **not confidence percentages**.
 
 ## Classifications
 
-- **Strong match** — the experimental evidence gate is satisfied and the retrieval evidence is not dominated by corpus-common fingerprints.
-- **Possible / common pattern** — meaningful similarity exists but should be reviewed cautiously.
-- **Insufficient evidence** — nothing in this tiny index cleared the reporting gate.
+- **Strong match** — source-specific evidence is substantial enough to justify surfacing this public source for review.
+- **Possible / common pattern** — there is meaningful similarity, but it may be explained by common implementation structure or insufficiently unique evidence.
+- **Insufficient evidence** — nothing in the indexed corpus is specific enough to attribute confidently.
+
+Never claim proof of copying, proof of plagiarism, AI authorship, or exhaustive source coverage.
 
 Similarity is never presented as proof of copying or AI authorship.
 
@@ -168,7 +198,7 @@ See `SECURITY.md`.
 npm test
 ```
 
-The default suite covers exact matches, identifier renames, formatting changes, partial fragments, mixed files, common patterns, absent sources, bounded retrieval, separate coverage metrics, GitHub file limits, POST/no-store, and the one-click scan flow.
+The default suite covers exact matches, identifier renames, literal-only changes, formatting changes, partial fragments, mixed files with multiple independent public sources, common/framework patterns, independently written implementations of the same algorithm, normalized-high/preserving-low false positives, overlapping-window de-duplication, absent sources, bounded retrieval, separate coverage metrics, GitHub file limits and provider failures, index freshness, partial-rescan resolution, deleted-file resolution, POST/no-store, and the one-click scan flow.
 
 A live network fixture is separate:
 
