@@ -15,3 +15,14 @@ the archive budget; entry paths, flags, modes, overlapping compressed ranges and
 compression ratios are validated even when excluded. Accepted source entries
 receive actual-size and CRC checks. No uploaded code is executed, installed,
 written to disk, sent to an LLM, or retained in a cache.
+
+## Public scan ZIP and folder UI
+
+Public `/scan` ZIP and folder upload, consulted 2026-09-22. No matcher, corpus, billing, or API changes. Limits and error codes follow `docs/ZIP_SCAN_API.md` on `feature/zip-scan-ingestion` (`b755e1a789e54df82ec8df918a9d53b1d53dfcb4`).
+
+| URL | Owner / title | Decision informed | Affected files |
+| --- | --- | --- | --- |
+| https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/webkitdirectory | MDN / `HTMLInputElement.webkitdirectory` | Folder scans use the directory picker on `<input type="file" webkitdirectory multiple>`, not drag-and-drop and not the File System Access API, so the control stays a labelled native input. | `src/features/publicScan/PublicScanPage.tsx` |
+| https://developer.mozilla.org/en-US/docs/Web/API/File/webkitRelativePath | MDN / `File.webkitRelativePath` | Submitted folder paths are `webkitRelativePath` (the selected folder name is the first segment). Exclusions must match that path; ZIP roots are not stripped either. | `src/features/publicScan/scanRequest.ts` |
+| https://developer.mozilla.org/en-US/docs/Web/API/Window/btoa | MDN / `btoa()` | Canonical ZIP `archiveBase64` is standard base64 with `=` padding and no data-URL prefix. `btoa` rejects code points above 255, so bytes are encoded directly instead of being passed through a Unicode string. | `src/features/publicScan/scanRequest.ts` |
+| https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array/toBase64 | MDN / `Uint8Array.prototype.toBase64()` | Where the method exists, call it with `{ alphabet: "base64", omitPadding: false }` so the payload matches Node’s canonical base64. Otherwise use the local encoder, which is tested against `Buffer.toString("base64")`. | `src/features/publicScan/scanRequest.ts` |
