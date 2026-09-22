@@ -286,7 +286,9 @@ export function PublicScanPage() {
             {`${result.scan.fetchedFiles} files checked. `}
             {strong.length === 0
               ? "No strong source match."
-              : `${strong.length} strong source ${strong.length === 1 ? "match" : "matches"} to review.`}
+              : openCount === 0
+                ? `${strong.length} strong source ${strong.length === 1 ? "match" : "matches"}, all dismissed.`
+                : `${strong.length} strong source ${strong.length === 1 ? "match" : "matches"} to review.`}
           </h2>
           <p className="ps-meta">
             <a href={result.repository.url} target="_blank" rel="noreferrer" className="mono">{result.repository.name}</a>
@@ -297,7 +299,7 @@ export function PublicScanPage() {
           </p>
 
           <div className="notice">
-            <strong>What this covers.</strong> {result.coverage.claim}{" "}
+            <strong>What this covers.</strong> {result.coverage.claim.replace(/^This lab searches/, "PoryGen currently searches")}{" "}
             {strong.length === 0
               ? "No strong match means nothing sufficiently specific was found in those sources — not that the code is original."
               : "A match is evidence to review, not proof of copying. Open the source, check its license, then dismiss it or fix the code and rescan."}

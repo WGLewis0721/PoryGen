@@ -21,7 +21,7 @@ export function parseGitHubRepositoryUrl(value) {
     throw new Error("Enter a valid public GitHub repository URL.");
   }
   if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "github.com") {
-    throw new Error("Only https://github.com public repository URLs are supported in this lab.");
+    throw new Error("Only https://github.com public repository URLs are supported.");
   }
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts.length < 2) throw new Error("Repository URL must look like https://github.com/owner/repo.");
@@ -107,7 +107,7 @@ export async function fetchPublicGitHubRepository(repoUrl, {
 
   const remaining = () => Math.max(500, deadline - Date.now());
   const metadata = await githubJson(base, fetchImpl, remaining());
-  if (metadata.private) throw new Error("This lab accepts public GitHub repositories only.");
+  if (metadata.private) throw new Error("Only public GitHub repositories can be scanned.");
 
   const commitInfo = await githubJson(
     `${base}/commits/${encodeURIComponent(metadata.default_branch)}`,
