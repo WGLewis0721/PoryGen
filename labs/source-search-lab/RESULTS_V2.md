@@ -22,7 +22,7 @@ The one locally skipped case is the live-network GitHub fixture. It is separated
 
 ## Networked validation
 
-GitHub Actions run `35670077761` completed successfully on commit `053286584bb3ccd6ef1e2666db2fb3c73cc350b9`.
+GitHub Actions run `35670197356` completed successfully on current V2 head commit `767fb88f180a5aa1224af26de17cdec08e1bf26f`.
 
 Both validation steps passed:
 
