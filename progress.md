@@ -1,87 +1,84 @@
 # Progress
 
-## 2026-09-22 — live MVP shipped
+## 2026-09-22 — multi-input source scanning live
 
-PoryGen is now a working public MVP on **https://porygen.vercel.app**.
+PoryGen is live at **https://porygen.vercel.app**.
 
-The real customer path is:
+The current customer path is:
 
-```
+\`\`\`
 /scan
-→ paste public GitHub repo
+→ choose public GitHub / ZIP / local folder
 → Scan
-→ real result
+→ PoryGen Engine
+→ source-match result
 → evidence
 → review / dismiss
-→ rescan
-```
+\`\`\`
 
 ### Shipped
 
-- Public no-account scanner at `/scan`.
-- Vercel serverless scan endpoint at `api/scan.mjs`.
-- Source Search V2 wired into production.
+- Public no-account scanner at /scan.
 - Public GitHub repository ingestion.
+- Secure ZIP project ingestion.
+- Browser-selected local folder ingestion.
+- One shared source-ingestion seam feeding the existing PoryGen Engine.
 - JavaScript / TypeScript / Python support.
-- Latest default-branch commit pinning.
-- Bounded source fetching through GitHub REST + raw.githubusercontent.com.
-- Reference index bundled into the Vercel function.
+- Starter/template/boilerplate exclusions applied before matching.
 - Strong / possible-common / abstention reporting.
 - Source-specific evidence required for strong findings.
-- Commit-pinned source links, exact line ranges, excerpts, and license metadata.
-- Partial-scan disclosure.
-- Review, dismiss, reopen, and rescan actions.
-- Browser-local decision persistence.
-- Safe rescan resolution.
-- SPA deep-link fixes.
-- Main build/deploy green.
+- Public-source links, exact line ranges, excerpts, and license metadata.
+- Partial/incomplete-scan disclosure.
+- GitHub review, dismiss, reopen and safe-rescan behavior.
+- Uploaded source/results kept transient and out of browser persistence.
+- Production ZIP security limits and structured errors.
+- Backend and UI merged to main.
+- Production deployment READY.
+- One real ZIP end-to-end HTTP gate returned a real strong match through the existing Engine.
 
-### Human-style production checks
+### Engine/corpus baseline
 
-Real live scans completed successfully for:
+Offline corpus:
 
-- `sindresorhus/yocto-queue`
-- `psf/requests`
-- `expressjs/cors`
+- 50,633 files
+- 1,017 packages/projects
+- 48,711 unique blobs
+- 48,633 deduplicated clusters
 
-Observed scan times were about 1–3 seconds for those examples.
+Production corpus pack:
 
-### Current reference coverage
+- 1,000 canonical package-source files
+- 199 popular npm/PyPI packages
 
-The V2 index contains 6 pinned files from:
+### Current boundaries
 
-- `sindresorhus/yocto-queue`
-- `date-fns/date-fns`
-- `psf/requests`
-
-This remains the biggest product limitation. The engine is live; the source universe is still small.
-
-## Current MVP boundaries
-
-- public GitHub repositories only;
+- connected private GitHub repositories are not yet supported;
 - JS / TS / Python only;
-- 40 files maximum;
-- 100 KB maximum per file;
-- 750 KB maximum source per scan;
-- review/dismiss state is browser-local;
-- no private repositories;
-- no GitHub App;
+- 150 matched files;
+- 100 KB/file;
+- 2 MB accepted source;
+- ZIP limit 2.9 MB compressed;
+- synchronous bounded request path;
+- only a subset of the offline corpus is served in production;
+- GitHub decisions are browser-local;
+- uploaded results intentionally are not durable;
+- no Source Match Report yet;
+- no MCP or CLI;
 - no automatic push/PR scans;
-- no customer billing enforcement;
-- no broad source corpus;
-- no async large-repository worker.
+- no production customer entitlement enforcement.
 
 ## Next
 
 See [ROADMAP.md](ROADMAP.md).
 
-Immediate focus:
+Net-new product order:
 
-1. harden the public endpoint and operational setup;
-2. add GitHub App + durable state/private repo support;
-3. broaden source coverage;
-4. scale scans;
-5. automate push/PR checks;
-6. monetize repo expansion through Stripe + APEX.
+1. Source Match Report
+2. PoryGen MCP
+3. PoryGen CLI
+4. PoryGen Engine / corpus scale-up
+5. connected GitHub + continuous monitoring
 
-Do not resume open-ended matcher research unless real production scans expose a specific failure.
+Hardening, rate limiting, monitoring, privacy/secret hygiene and counsel review continue in parallel.
+
+Do not resume open-ended matcher research unless real production behavior exposes a specific failure.

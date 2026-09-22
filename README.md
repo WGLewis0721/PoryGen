@@ -2,165 +2,181 @@
 
 **Move fast. Keep it yours.**
 
-PoryGen checks public GitHub repositories for suspicious similarity to indexed public source code so a developer can inspect the source, understand the license context, and decide what to do before shipping.
+PoryGen checks code for meaningful similarity to indexed public source and shows where that code may have come from.
 
-> If AI-assisted coding becomes normal, checking what the AI gave you should become normal too.
+The code can be handwritten, copied or adapted from public sources, AI-assisted, AI-generated, inherited, or some mixture of all of those. PoryGen checks the artifact; it does not require knowing how the code was created.
 
 **Live:** https://porygen.vercel.app  
-**Real public-repo scanner:** https://porygen.vercel.app/scan  
+**Scanner:** https://porygen.vercel.app/scan  
 **Guided sample demo:** https://porygen.vercel.app/demo
 
-## MVP status
+## Core question
 
-PoryGen is now a working public MVP.
+> **Does this code meaningfully resemble code that exists somewhere else, and where might it have come from?**
 
-A visitor can:
+PoryGen is not an AI detector. License context and downstream review workflows are useful consequences of finding a possible source, but they do not replace the core source-match problem.
 
-1. paste a public GitHub repository URL;
-2. click **Scan** with no account;
-3. have PoryGen fetch the latest commit;
-4. compare supported JavaScript, TypeScript, and Python files against the current reference index;
-5. see strong matches, possible/common patterns, or a clean abstention;
-6. inspect matched line ranges, source excerpts, commit-pinned GitHub links, and license metadata;
-7. review or dismiss a finding;
-8. push a change and rescan to see whether the finding is still present.
+## Current MVP
 
-The current production path is **real repo → Scan → real result → evidence → action**.
+The live /scan experience accepts:
 
-## What happens during a scan
+1. a public GitHub repository URL;
+2. a ZIP project upload;
+3. a browser-selected local folder.
 
-```
-public GitHub URL
-  → resolve latest default-branch commit
-  → read repository tree
-  → fetch bounded JS / TS / Python source
-  → normalize + fingerprint
-  → retrieve candidate public sources
-  → verify source-specific similarity
-  → classify strong / possible-common / insufficient
-  → show exact source, lines, license and evidence
-```
+All three paths feed the same PoryGen Engine and use the same strong / possible-common / abstention semantics.
 
-The production endpoint is `api/scan.mjs`, a Vercel serverless function using the Source Search V2 engine under `labs/source-search-lab/lib/`.
+A visitor can scan without creating an account.
 
-### Current scan limits
+### Findings can include
 
-- public GitHub repositories only;
-- JavaScript, TypeScript, and Python;
-- up to 40 supported files;
-- up to 100 KB per file;
-- up to 750 KB of source per scan;
-- bounded request-time execution;
-- build/vendor/generated directories are skipped.
+- affected customer file and matched lines;
+- possible public source;
+- pinned public-source location when available;
+- source/license/version metadata;
+- side-by-side excerpts;
+- why PoryGen surfaced the match;
+- review / dismiss / reopen actions.
 
-When a scan cannot cover every supported file, the UI reports a **partial scan** rather than silently implying complete coverage.
+A result of **No strong source match** means only that no sufficiently specific match was found in the sources and files PoryGen actually checked. It does not prove originality.
 
-## Current source coverage
+## Input flow
 
-The matching engine is real; the source corpus is intentionally small.
+### Public GitHub
 
-The bundled V2 reference index currently contains **6 pinned files from 3 public repositories**:
+public GitHub URL  
+→ resolve latest default-branch commit  
+→ inspect supported source files  
+→ PoryGen Engine  
+→ source-match evidence
 
-- `sindresorhus/yocto-queue`
-- `date-fns/date-fns`
-- `psf/requests`
+### ZIP
 
-Every source is pinned to a commit and documented with its license.
+ZIP bytes  
+→ safe in-memory archive validation/extraction  
+→ supported source selection  
+→ PoryGen Engine  
+→ source-match evidence
 
-A result of **No strong source match** means only that no sufficiently specific match was found in the sources PoryGen currently indexes. It does **not** mean the repository is original or free of license risk.
+### Local folder
+
+browser-selected files  
+→ safe path/source filtering  
+→ supported source selection  
+→ PoryGen Engine  
+→ source-match evidence
+
+Starter/template/boilerplate files or folders can be explicitly excluded before matching.
+
+## Supported source
+
+- JavaScript
+- TypeScript
+- Python
+
+Common scan budgets:
+
+- up to **150 matched files**;
+- up to **100 KB per source file**;
+- up to **2 MB accepted source per scan**;
+- bounded request-time processing.
+
+ZIP uploads additionally use:
+
+- **2.9 MB compressed ZIP limit**;
+- **1,000 archive-entry limit**;
+- **10 MB declared/expanded archive budget**;
+- no recursive nested-archive extraction.
+
+See [docs/ZIP_SCAN_API.md](docs/ZIP_SCAN_API.md) for the authoritative upload contract.
+
+## Source coverage
+
+The PoryGen Engine has an offline corpus pipeline containing:
+
+- **50,633 files**
+- **1,017 packages/projects**
+- **48,711 unique blobs**
+- **48,633 deduplicated clusters**
+
+The current production corpus pack serves **1,000 canonical package-source files from 199 popular npm/PyPI packages**. A small pinned V2 reference set remains for documented fixture/regression behavior.
+
+Production coverage is deliberately disclosed as limited. A customer scan does not crawl the internet.
 
 ## Reporting philosophy
 
-Retrieval is broad; reporting is conservative.
+Retrieval can be broad; customer-facing reporting stays conservative.
 
-Normalized structural similarity is useful for finding candidates, but structure alone cannot create a strong attribution. A **Strong match** also requires source-specific evidence such as exact identifier/literal overlap or rare preserving fingerprints.
+Normalized structure helps retrieve candidates, but ordinary same-shape code should not become a strong attribution by itself. Strong findings require source-specific evidence.
 
-Possible/common patterns are separated from strong findings so ordinary implementation patterns do not read like accusations.
+PoryGen may abstain entirely. Abstention is a valid scan outcome.
 
-PoryGen may return no source finding at all. Abstention is a successful scan outcome.
+## Privacy behavior
 
-## Actions and persistence
+Public GitHub source is processed transiently server-side. The browser may keep GitHub scan/review state locally to support manual rescans.
 
-The public MVP currently supports:
+Uploaded ZIP/folder source, excerpts, and upload scan results are not intentionally persisted server-side and are not written to browser localStorage/sessionStorage by the upload flow.
 
-- **Review source** — opens the exact commit-pinned source and matched lines;
-- **Dismiss** — records a reason in browser local storage;
-- **Reopen** — restores a dismissed finding;
-- **Rescan latest commit** — fetches the current repository state again;
-- **Safe resolution** — a disappeared finding is only called resolved when its file was actually rechecked or a complete repository tree proves the file was deleted.
-
-Public-scan decisions are currently browser-local. Durable account/workspace history is a later product phase.
-
-## Sample demo
-
-`/demo` remains a guided fictional walkthrough. It is useful for learning the workflow, but it is not the same thing as the live scanner.
-
-The real product path is `/scan`.
-
-## What is not built yet
-
-- private repository scanning;
-- GitHub App installation and repository picker;
-- automatic push / pull-request monitoring;
-- GitHub Check Runs;
-- durable cloud persistence for public-scan review/dismiss decisions;
-- team/workspace controls;
-- broad internet-scale source coverage;
-- async scanning for large repositories;
-- production customer billing/entitlement enforcement;
-- GitHub Marketplace distribution.
-
-The repository still contains the earlier Supabase-authenticated application and billing groundwork. The public MVP no longer requires that stack to perform a real scan.
+No customer code is sent to a runtime LLM.
 
 ## What PoryGen does not claim
 
-- **Not exhaustive.** Coverage is limited to the indexed sources.
-- **Not proof of copying.** Similarity is evidence for a human to review.
+- **Not exhaustive.** Coverage is limited to indexed sources and actually checked files.
+- **Not proof of copying.**
+- **Not proof of infringement or license violation.**
 - **Not proof of AI authorship.**
+- **Not proof of originality.**
 - **Not legal advice.**
-- **Not a certification of originality.**
+- **Not a certification.**
+
+## What is next
+
+The next net-new product addition is the **Source Match Report**: a clean exportable artifact showing what matched, where it matched, the evidence, coverage and exclusions.
+
+The net-new sequence after that is:
+
+**Source Match Report → MCP → CLI → Engine/corpus scale-up → connected GitHub + continuous monitoring.**
+
+Operational hardening continues in parallel.
+
+See [ROADMAP.md](ROADMAP.md).
 
 ## Local development
 
-```bash
+\`\`\`bash
 npm install
 npm run dev
-```
+\`\`\`
 
-For the real public scan API during local development, run the isolated scan server in another terminal:
+For the scan API during local development:
 
-```bash
+\`\`\`bash
 npm --prefix labs/source-search-lab start
-```
+\`\`\`
 
-Vite proxies `/api` to that server.
+Vite proxies /api to that server.
 
 Quality commands:
 
-```bash
+\`\`\`bash
 npm test
 npm run build
 npm run lint
-```
+\`\`\`
 
 ## Production configuration
 
-The live scanner can use a server-side `GITHUB_TOKEN` to increase GitHub API capacity. It is never sent to the browser.
+The live scanner can use a server-side GITHUB_TOKEN to increase GitHub API capacity. It is never sent to the browser.
 
-The public scan fetcher uses GitHub REST for repository metadata, commit, and tree resolution, then uses `raw.githubusercontent.com` for source contents so a normal scan consumes only a few GitHub API requests.
-
-The Vercel function bundles the prebuilt reference index through `vercel.json`.
+The production endpoint is api/scan.mjs. Stable source matching remains in the existing Source Search V2/PoryGen Engine path rather than a separate matcher for uploads.
 
 ## Documentation
 
-- [ROADMAP.md](ROADMAP.md) — current product state and next execution phases
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — live MVP architecture and evolution path
-- [docs/SCANNER.md](docs/SCANNER.md) — Source Search V2 retrieval, verification, coverage and limits
-- [docs/SECURITY.md](docs/SECURITY.md) — public scan boundary, secrets and retention
-- [docs/DEMO_FLOW.md](docs/DEMO_FLOW.md) — real public scan and sample demo flows
-- [docs/LIVE_QA_2026-09-22.md](docs/LIVE_QA_2026-09-22.md) — live QA history and final MVP retest
+- [ROADMAP.md](ROADMAP.md) — current product state and net-new execution order
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — current multi-input architecture and evolution path
+- [docs/SCANNER.md](docs/SCANNER.md) — matching, ingestion, coverage and limits
+- [docs/ZIP_SCAN_API.md](docs/ZIP_SCAN_API.md) — ZIP/folder API contract and security bounds
+- [docs/SECURITY.md](docs/SECURITY.md) — scan boundary, secrets and retention
+- [docs/DEMO_FLOW.md](docs/DEMO_FLOW.md) — live customer flows
 - [docs/OPUS_HANDOFF.md](docs/OPUS_HANDOFF.md) — current implementation handoff
-- [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — existing authenticated-app persistence model
-- [docs/PROVENANCE.md](docs/PROVENANCE.md) — earlier provenance/history capabilities
-- [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md) — existing billing groundwork
-- [DESIGN.md](DESIGN.md) · [VISUAL-PLAN.md](VISUAL-PLAN.md) — visual system
+- [IMPLEMENTATION_SOURCES.md](IMPLEMENTATION_SOURCES.md) — external implementation references

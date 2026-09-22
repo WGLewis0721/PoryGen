@@ -2,19 +2,23 @@
 
 ## Product shape
 
-PoryGen is source-risk protection for AI-assisted development.
+PoryGen is a source-match discovery product.
 
-The live MVP is intentionally simple:
+Core question:
 
-**public repo → Scan → evidence → action**
+> **Does this code meaningfully resemble code that exists somewhere else, and where might it have come from?**
 
-The matching engine is only one part of the product. The customer-facing loop is:
+The origin of the customer code is not an input to the matcher. It may be handwritten, copied/adapted, AI-assisted, AI-generated, inherited, or mixed.
 
-**detect → understand → review/dismiss → rescan → resolve**
+The live product loop is:
 
-## Live MVP architecture
+**GitHub / ZIP / local folder → Scan → evidence → review**
 
-```
+All input types converge on the same PoryGen Engine.
+
+## Live architecture
+
+\`\`\`
 Browser
   React 19 / Vite / React Router
         │
@@ -23,174 +27,203 @@ Browser
 Vercel serverless function
   api/scan.mjs
         │
+        ├─ sourceType: github
+        │    └─ safe GitHub fetcher
+        │         api.github.com
+        │         raw.githubusercontent.com
+        │
+        ├─ sourceType: zip
+        │    └─ bounded in-memory ZIP ingestion worker
+        │
+        └─ sourceType: files
+             └─ bounded browser-selected file ingestion
+        │
         ▼
-Source Search V2 service
+Shared source-file abstraction
+        │
+        ▼
+PoryGen Engine / Source Search V2
   labs/source-search-lab/lib/scan-service.mjs
         │
-        ├─ GitHub fetcher
-        │    api.github.com
-        │    raw.githubusercontent.com
-        │
-        ├─ tokenizer + dual representations
-        ├─ Winnowing fingerprint retrieval
-        ├─ bounded candidate shortlist
+        ├─ tokenizer + preserving/normalized representations
+        ├─ Winnowing fingerprints
+        ├─ corpus-frequency / rarity signals
+        ├─ bounded candidate retrieval
         ├─ ordered/contiguous verification
+        ├─ likely-source/canonical metadata
         └─ conservative reporting gate
              │
              ▼
-Bundled reference index
-  labs/source-search-lab/data/reference-index.json
+Production corpus pack + pinned reference fixtures
              │
              ▼
-JSON scan result
-        │
-        ▼
+JSON ScanResult
+             │
+             ▼
 /scan UI
   strong findings
   possible/common patterns
   abstention
-  source links
-  excerpts
-  license
+  source/line evidence
+  source/license metadata
   review/dismiss
-  rescan
-```
+  exclusions/completeness
+\`\`\`
 
-The Vercel function bundles the reference index explicitly through `vercel.json`.
+No third-party LLM is in the runtime scan path.
 
-## Public scan request
+## Input contract
 
-The public scanner does not require an account.
+POST /api/scan accepts exactly one source representation:
 
-`POST /api/scan` accepts one public GitHub repository URL.
+### GitHub
 
-The server:
+- optional sourceType: github;
+- repositoryUrl;
+- optional exclusions;
+- Terms acceptance fields.
 
-1. validates that the URL is an HTTPS `github.com/<owner>/<repo>` URL;
-2. resolves repository metadata;
-3. resolves the current default-branch commit;
-4. reads the complete Git tree when GitHub can provide it;
-5. selects supported JS/TS/Python files;
-6. fetches source from `raw.githubusercontent.com`;
-7. compares source against the prebuilt index;
-8. returns evidence and completeness metadata.
+The server validates the GitHub repository reference, resolves the current default-branch commit/tree, selects supported source, and fetches source without executing repository code.
 
-The scanner does not clone or execute customer repositories.
+### ZIP
 
-## Why the live path uses Source Search V2
+- sourceType: zip;
+- canonical archiveBase64;
+- optional exclusions;
+- Terms acceptance fields.
 
-The repository contains an older, broader authenticated application architecture built around Supabase, `packages/provenance-core`, persistence, billing, and resolution history.
+The archive is validated and processed in memory. It is not recursively unpacked and is not written to a customer-source store.
 
-That work remains useful groundwork, but it is **not required for the live MVP scan**.
+### Browser-selected files
 
-The shortest path to a working product was to expose the validated Source Search V2 engine directly behind a Vercel function and make `/scan` the primary CTA.
+- sourceType: files;
+- project-relative path/content pairs;
+- optional exclusions;
+- Terms acceptance fields.
 
-Future integration should reuse useful persistence/auth components without putting them back in front of the first useful scan.
+The server remains authoritative for paths, limits, supported source and exclusions.
+
+See [ZIP_SCAN_API.md](ZIP_SCAN_API.md).
+
+## Source selection
+
+Current supported languages:
+
+- JavaScript
+- TypeScript
+- Python
+
+Dependency/vendor/build/generated paths are skipped using existing scanner conventions.
+
+User exclusions are applied before matching and are auditable in result metadata.
 
 ## Retrieval and reporting
 
-The live engine deliberately separates two questions.
+The Engine deliberately separates two questions.
 
 ### Retrieval
 
 > Which indexed sources are worth checking closely?
 
-For each customer region the engine uses two lexical representations and a prebuilt inverted fingerprint index to retrieve a bounded candidate set.
+Normalized and preserving lexical representations plus fingerprint postings retrieve a bounded candidate set.
 
 ### Reporting
 
-> Is the evidence specific enough to show this source to a customer?
+> Is the evidence specific enough to name this public source?
 
-A candidate does not become a strong match from generic normalized structure alone.
+Generic structural similarity alone cannot create a strong source attribution.
 
-Strong reporting requires structural evidence plus source-specific evidence such as preserving-token overlap or rare preserving fingerprints.
+Strong results require substantial structural overlap plus source-specific evidence such as preserving-token continuity and/or rare preserving fingerprints.
 
-If evidence is weak or generic, the result is possible/common-pattern or no reportable source.
+Weak/generic evidence becomes possible/common or abstention.
 
-This is why the system can retrieve broadly while still abstaining.
+## Corpus
 
-## Current reference index
+The offline source-index pipeline currently contains:
 
-The bundled V2 index contains 6 pinned files from 3 real public repositories:
+- 50,633 files;
+- 1,017 packages/projects;
+- 48,711 unique blobs;
+- 48,633 deduplicated clusters.
 
-- `sindresorhus/yocto-queue`
-- `date-fns/date-fns`
-- `psf/requests`
+The current production corpus pack serves:
 
-The index is prebuilt outside the customer request path.
+- 1,000 canonical package-source files;
+- 199 popular npm/PyPI packages.
 
-A scan never crawls the web to build its corpus.
+A small pinned V2 reference set remains for documented fixtures/regression behavior.
 
-The current corpus is an MVP limitation, not a claim of exhaustive search.
+A customer scan never crawls the web to build its corpus.
 
-## Scan completeness
+## Scan bounds
 
-The repository fetcher separately records whether supported files were actually checked.
+Common source budgets:
 
-Current limits:
+- 150 matched files;
+- 100 KB/file;
+- 2 MB accepted source;
+- bounded request duration.
 
-- 40 files;
-- 100 KB per file;
-- 750 KB total;
-- bounded scan duration;
-- generated/vendor/build directories excluded.
+ZIP additionally enforces:
 
-Incomplete reasons are tracked independently from the capped UI detail list.
+- 2.9 MB compressed bytes;
+- 1,000 entries;
+- 10 MB declared/expanded archive budget;
+- path/symlink/special-file/duplicate/range/integrity protections;
+- bounded worker deadline/concurrency.
 
-A partial scan is reported as partial.
+When coverage is incomplete, ScanResult reports that explicitly.
+
+## State and retention
+
+### Public GitHub
+
+The browser may persist the latest public GitHub scan and review/dismiss state locally for manual rescan behavior.
+
+### ZIP/folder
+
+Uploaded source and upload results/excerpts are not intentionally persisted server-side and are not written to browser localStorage/sessionStorage by the upload flow.
+
+The upload repository envelope uses a deterministic content digest, not a Git commit.
+
+A missing upload file cannot prove deletion from the real project.
 
 ## Rescan safety
 
-A finding that disappears on a later scan is only treated as resolved when:
+A GitHub finding that disappears is only considered resolved when:
 
-- the affected customer file was successfully fetched and compared; or
-- a complete Git tree proves the file was deleted.
+- its file was successfully rechecked; or
+- a complete Git tree proves deletion.
 
-A partial rescan that simply fails to revisit the file cannot silently resolve it.
+Excluding a file does not resolve an earlier finding.
 
-## Client-side state
+Upload scans do not infer durable resolution from files that are absent in a later manual selection.
 
-The public MVP stores review/dismiss decisions in browser local storage.
+## Existing application groundwork
 
-That is sufficient for the anonymous MVP, but it is not durable workspace history.
-
-The existing Supabase data model and RLS work can support the later connected-account product.
-
-## Existing authenticated stack
-
-The repository still includes:
+The repository also contains:
 
 - Supabase Auth;
 - Postgres/RLS migrations;
 - scan/finding/history tables;
 - resolution functions;
-- Stripe groundwork;
-- APEX dogfood work;
-- evidence/history UI.
+- Stripe/APEX groundwork;
+- older provenance/history UI.
 
-Those are not currently the critical path for `/scan`.
-
-The next connected-product phase should add GitHub App identity and durable state without removing the anonymous first scan.
+Reuse those components when they fit later durable/connected features. Do not put account creation back in front of first scan value.
 
 ## Evolution path
 
-The intended evolution is:
+Net-new sequence:
 
-1. harden the public endpoint;
-2. move stabilized production scanner code out of the `labs/` namespace;
-3. connect GitHub App + durable user/workspace state;
-4. expand the source index/providers;
-5. add async workers for larger repositories;
-6. add push/PR-triggered scans and GitHub Check Runs;
-7. enforce paid repository entitlements through Stripe + APEX.
+1. Source Match Report;
+2. PoryGen MCP;
+3. PoryGen CLI;
+4. larger scalable Engine/corpus retrieval;
+5. connected GitHub + durable state + continuous monitoring;
+6. larger-scan workers when scale requires them;
+7. monetization, teams and distribution.
 
-See [ROADMAP.md](../ROADMAP.md).
+Operational hardening continues in parallel.
 
-## External systems used by the live MVP
-
-- Vercel — frontend + serverless scan function;
-- GitHub REST API — repository metadata, commit and tree;
-- raw.githubusercontent.com — source file contents;
-- server-side `GITHUB_TOKEN` — optional authenticated GitHub API capacity.
-
-No third-party LLM is in the runtime scan path.
+See [../ROADMAP.md](../ROADMAP.md).

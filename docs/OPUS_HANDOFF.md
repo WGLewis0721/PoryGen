@@ -1,71 +1,118 @@
-# Handoff — live MVP
+# Handoff — multi-input MVP
 
 ## Current state
 
-PoryGen is no longer only a demo or isolated scanner lab.
+PoryGen is a live source-match product.
 
-The production site now supports the real MVP loop:
+Core question:
 
-**real public repo → Scan → real result → evidence → action**
+> **Does this code meaningfully resemble code that exists somewhere else, and where might it have come from?**
+
+Do not redefine the product around AI detection, a particular coding tool, or compliance.
+
+The customer code may be handwritten, copied/adapted, AI-assisted, AI-generated, inherited or mixed.
 
 Live site: https://porygen.vercel.app  
 Scanner: https://porygen.vercel.app/scan
 
-## What landed
+## Current production flow
 
-- PR #5: Vercel SPA deep-link rewrites and test-runner cleanup.
-- Real public `/scan` page with no-account access.
-- Vercel `/api/scan` function.
-- Source Search V2 shared through `scan-service.mjs`.
-- GitHub repository ingestion optimized to use raw GitHub content for files.
-- Production `GITHUB_TOKEN` support.
-- Bundled V2 reference index in the Vercel function.
-- Strong/possible/abstention UI.
-- Side-by-side evidence, pinned source lines, and license metadata.
-- Review/dismiss/reopen actions in browser-local state.
-- Safe rescan resolution.
-- Real production scans successfully exercised.
+\`\`\`
+public GitHub / ZIP / local folder
+→ safe ingestion
+→ existing PoryGen Engine
+→ strong / possible-common / abstention
+→ source evidence
+→ review
+\`\`\`
 
-## Live scanner boundaries
+## What is shipped
 
-- public GitHub only;
-- JavaScript, TypeScript, Python;
-- 40 files;
-- 100 KB per file;
-- 750 KB total;
-- current index: 6 pinned files from 3 public repos.
+- no-account /scan experience;
+- public GitHub repository scans;
+- ZIP upload scans;
+- local folder scans;
+- shared Engine/result semantics across all inputs;
+- JavaScript / TypeScript / Python;
+- starter/template/boilerplate exclusions before matching;
+- conservative source-specific strong-match gate;
+- line/source/excerpt evidence;
+- source/license metadata;
+- review/dismiss/reopen;
+- safe GitHub rescan resolution;
+- transient upload processing;
+- upload results/excerpts excluded from browser persistence;
+- hardened ZIP validation/limits;
+- production corpus pack of 1,000 canonical package-source files from 199 npm/PyPI packages;
+- offline source-index corpus of 50,633 files across 1,017 packages/projects.
 
-## Important architectural note
+PR #17 added secure ZIP/folder backend ingestion.
 
-The production scanner still lives under `labs/source-search-lab` because it was promoted directly from the validated V2 lab.
+PR #18 added the multi-input public scan UI, was rebased onto #17, passed one real ZIP HTTP end-to-end Engine gate, and is live in production.
 
-That is acceptable for the MVP.
+## Current important boundaries
 
-Do not rewrite it merely to make the directory name prettier. Move it into a production package when there is an actual reason to touch the boundary.
+- connected private GitHub is not built;
+- JS/TS/Python only;
+- 150 matched files / 100 KB each / 2 MB accepted source;
+- ZIP max 2.9 MB compressed / 1,000 entries / 10 MB expanded-declared budget;
+- synchronous bounded scan path;
+- production does not yet serve the full offline corpus;
+- upload results are intentionally non-durable;
+- no Source Match Report;
+- no MCP;
+- no CLI;
+- no automatic push/PR checks;
+- no customer entitlement enforcement.
 
-## Existing Supabase application
+## Next net-new product
 
-The earlier authenticated app, RLS model, persistent resolution history, billing groundwork, and APEX work remain in the repository.
+**Source Match Report**
 
-They should be reused selectively for the connected-product phase.
+Build a clean exportable artifact from a completed scan showing:
 
-Do **not** put signup back in front of the first public scan.
+- what was scanned;
+- coverage/completeness;
+- exclusions;
+- matched customer files/lines;
+- possible public source;
+- source/license/version metadata;
+- compact evidence;
+- review/dismiss state where available;
+- explicit limitations.
 
-## Next priorities
+It is not a certificate, legal opinion, AI report or proof of originality.
 
-1. Harden the public endpoint: secrets, rate limiting/abuse control, monitoring, privacy/legal basics.
-2. GitHub App + repository picker + private repos + durable state.
-3. Broader source coverage.
-4. Async scanning for larger repos.
-5. Push/PR automation and GitHub checks.
-6. Repo-based paid expansion with Stripe + APEX.
+Do not persist uploaded source merely to create the report.
+
+## Roadmap after the report
+
+1. PoryGen MCP
+2. PoryGen CLI
+3. Engine/corpus scale-up
+4. connected GitHub + continuous monitoring
+5. larger scan infrastructure when required
+6. monetization/teams/distribution later
+
+## Parallel hardening
+
+Continue:
+
+- abuse/rate limiting;
+- monitoring;
+- Privacy/data-handling;
+- secret hygiene;
+- counsel review before paid scale;
+- repository privacy before substantially deeper proprietary Engine work.
 
 ## Do not do next
 
-- another open-ended similarity research program;
-- large new benchmark work without a specific matcher change;
-- team administration before GitHub connection;
-- billing before the durable repo model;
-- visual redesign that does not improve the scan loop.
+- do not restart open-ended matcher research;
+- do not build another matcher for MCP/CLI;
+- do not narrow positioning to Lovable/Bolt/v0/Replit, Claude/OpenAI/Gemini/Ollama, or any other specific tool/model;
+- do not turn PoryGen into an AI-authorship detector;
+- do not put signup or billing in front of first scan value;
+- do not call a report a certificate;
+- do not build enterprise policy/SBOM/CVE scope as the next customer feature.
 
-See [ROADMAP.md](../ROADMAP.md).
+See [../ROADMAP.md](../ROADMAP.md).
