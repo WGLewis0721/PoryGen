@@ -333,8 +333,8 @@ export function PublicScanPage() {
           {possible.length > 0 && (
             <details className="ps-possible">
               <summary>
-                {possible.length} possible / common {possible.length === 1 ? "pattern" : "patterns"} — similar shape to public code, usually
-                fine
+                {result.summary.possible} possible / common {result.summary.possible === 1 ? "pattern" : "patterns"} — similar shape to
+                public code, usually fine{result.summary.possible > possible.length && ` (showing the ${possible.length} closest)`}
               </summary>
               <ol className="ps-findings" aria-label="Possible or common patterns">
                 {possible.map((f) => (
