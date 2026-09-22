@@ -1,9 +1,10 @@
 import { detectLanguage } from "./search.mjs";
 
 export const GITHUB_LIMITS = Object.freeze({
-  maxFiles: 40,
+  maxFiles: 150,
   maxFileBytes: 100_000,
-  maxTotalBytes: 750_000,
+  maxTotalBytes: 2_000_000,
+  concurrency: 8,
   maxScanMs: 15_000,
   maxSkippedDetails: 40,
 });
@@ -80,6 +81,22 @@ async function githubJson(url, fetchImpl, timeoutMs) {
   }
 }
 
+const AUXILIARY_PATH = /(^|\/)(tests?|__tests__|spec|specs|e2e|bench(mark)?s?|examples?|demos?|docs?|scripts?|tools?|\.github)(\/|$)|\.(test|spec|bench)\.[a-z]+$|(^|\/)(test_[^/]*|[^/]*_test)\.py$|(^|\/)(tests?|bench(mark)?s?|examples?)\.[a-z]+$|\.config\.[a-z]+$|(^|\/)(setup|conftest)\.py$/i;
+
+// Auxiliary code (tests, benchmarks, examples, tooling) rarely carries the risk
+// a scan is for, and generic test scaffolding is the main source of weak matches.
+export function isAuxiliaryPath(path) {
+  return AUXILIARY_PATH.test(path);
+}
+
+// Spend the file budget on product source first: non-auxiliary, shallow, then
+// conventional source roots.
+function pathPriority(path) {
+  const depth = path.split("/").length;
+  const sourceRoot = /^(src|lib|packages|app|pkg)\//i.test(path) ? -1 : 0;
+  return (isAuxiliaryPath(path) ? 100 : 0) + sourceRoot + depth;
+}
+
 function supportedPath(path) {
   return detectLanguage(path) !== "unknown";
 }
@@ -145,60 +162,67 @@ export async function fetchPublicGitHubRepository(repoUrl, {
     candidates.push(entry);
   }
 
-  const files = [];
-  let totalBytes = 0;
-  let stoppedForLimit = false;
+  candidates.sort((x, y) => pathPriority(x.path) - pathPriority(y.path) || x.path.localeCompare(y.path));
 
+  const selected = [];
+  let plannedBytes = 0;
+  let stoppedForLimit = false;
   for (let index = 0; index < candidates.length; index++) {
     const entry = candidates[index];
     const remainingCandidates = candidates.length - index;
-
-    if (Date.now() >= deadline) {
-      stoppedForLimit = true;
-      addIncomplete(incompleteReasons, "time_limit", remainingCandidates);
-      pushSkipped(skipped, { path: entry.path, reason: "time_limit" }, limits);
-      break;
-    }
-    if (files.length >= limits.maxFiles) {
+    if (selected.length >= limits.maxFiles) {
       stoppedForLimit = true;
       addIncomplete(incompleteReasons, "file_limit", remainingCandidates);
       pushSkipped(skipped, { path: entry.path, reason: "file_limit" }, limits);
       break;
     }
-    if (totalBytes + (entry.size ?? 0) > limits.maxTotalBytes) {
+    if (plannedBytes + (entry.size ?? 0) > limits.maxTotalBytes) {
       stoppedForLimit = true;
       addIncomplete(incompleteReasons, "total_byte_limit", remainingCandidates);
       pushSkipped(skipped, { path: entry.path, reason: "total_byte_limit", bytes: entry.size }, limits);
       break;
     }
+    plannedBytes += entry.size ?? 0;
+    selected.push(entry);
+  }
 
-    try {
-      // Raw content is served outside the REST API quota, so a scan costs three API calls.
-      const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${commit}/${entry.path.split("/").map(encodeURIComponent).join("/")}`;
-      const source = await githubRaw(rawUrl, fetchImpl, remaining());
-      const bytes = Buffer.byteLength(source, "utf8");
-      if (bytes > limits.maxFileBytes) {
-        addIncomplete(incompleteReasons, "decoded_file_too_large");
-        pushSkipped(skipped, { path: entry.path, reason: "decoded_file_too_large", bytes }, limits);
+  const fetchedByIndex = new Array(selected.length);
+  let next = 0;
+  async function worker() {
+    while (next < selected.length) {
+      const index = next++;
+      const entry = selected[index];
+      if (Date.now() >= deadline) {
+        stoppedForLimit = true;
+        addIncomplete(incompleteReasons, "time_limit");
+        pushSkipped(skipped, { path: entry.path, reason: "time_limit" }, limits);
         continue;
       }
-
-      totalBytes += bytes;
-      files.push({
-        path: entry.path,
-        language: detectLanguage(entry.path),
-        bytes,
-        source,
-      });
-    } catch (error) {
-      addIncomplete(incompleteReasons, "provider_failure");
-      pushSkipped(skipped, {
-        path: entry.path,
-        reason: "provider_failure",
-        message: error instanceof Error ? error.message : String(error),
-      }, limits);
+      try {
+        // Raw content is served outside the REST API quota, so a scan costs three API calls.
+        const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${commit}/${entry.path.split("/").map(encodeURIComponent).join("/")}`;
+        const source = await githubRaw(rawUrl, fetchImpl, remaining());
+        const bytes = Buffer.byteLength(source, "utf8");
+        if (bytes > limits.maxFileBytes) {
+          addIncomplete(incompleteReasons, "decoded_file_too_large");
+          pushSkipped(skipped, { path: entry.path, reason: "decoded_file_too_large", bytes }, limits);
+          continue;
+        }
+        fetchedByIndex[index] = { path: entry.path, language: detectLanguage(entry.path), bytes, source };
+      } catch (error) {
+        addIncomplete(incompleteReasons, "provider_failure");
+        pushSkipped(skipped, {
+          path: entry.path,
+          reason: "provider_failure",
+          message: error instanceof Error ? error.message : String(error),
+        }, limits);
+      }
     }
   }
+  await Promise.all(Array.from({ length: Math.max(1, limits.concurrency ?? 1) }, worker));
+
+  const files = fetchedByIndex.filter(Boolean);
+  const totalBytes = files.reduce((sum, file) => sum + file.bytes, 0);
 
   const incompleteSupportedFiles = Object.values(incompleteReasons)
     .reduce((sum, value) => sum + value, 0);

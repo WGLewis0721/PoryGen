@@ -1,4 +1,4 @@
-import { fetchPublicGitHubRepository } from "./github-source.mjs";
+import { fetchPublicGitHubRepository, isAuxiliaryPath } from "./github-source.mjs";
 import { scanSourceFiles } from "./search.mjs";
 
 const ok = (payload) => ({ status: 200, payload });
@@ -12,6 +12,10 @@ export async function scanRepository(repositoryUrl, {
   try {
     const fetched = await repositoryFetcher(repositoryUrl);
     const compared = scanSourceFiles(fetched.files, referenceIndex, referenceIndex.settings);
+    // Reporting filter, not a matcher change: weak shape-only similarity in tests,
+    // benchmarks and tooling is overwhelmingly scaffolding, so it is not surfaced.
+    compared.findings = compared.findings.filter((f) =>
+      !(f.classification === "possible_common_pattern" && isAuxiliaryPath(f.customer.path)));
 
     const strong = compared.findings.filter((f) => f.classification === "strong_match").length;
     const possible = compared.findings.filter((f) => f.classification === "possible_common_pattern").length;
