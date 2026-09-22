@@ -1,20 +1,18 @@
 # PoryGen — project facts
 
-- **What:** continuous source-risk protection for AI-assisted development. Checks the code AI
-  agents put into a product for suspicious source similarity and license risk; resolution
-  history is a side effect. Not an AI detector, not legal certification, not M&A software.
-- **Audience:** AI-native founders and teams of ~1–20 developers.
-- **Primary CTA:** Scan a repo (`/sign-up` → `/repositories/new`). Secondary: See live demo (`/demo`).
-- **Status:** production-intent product in early access. Real scanning of public GitHub repos;
-  similarity coverage is limited to a small bundled reference corpus and must be described that
-  way. Continuous monitoring, private repos, GitHub checks, and team features are not built.
-- **Stack:** React 19 + TypeScript + Vite + React Router; Supabase (Auth, Postgres + RLS, Edge
-  Functions); `packages/provenance-core` (scanner + provenance); `packages/vscode-extension`.
-- **Deploy:** Cloudflare Workers static assets via `scripts/deploy-worker-assets.mjs`; Supabase
-  migrations and functions via the Supabase CLI. Order: migrations → functions → frontend.
-- **Pricing source of truth:** `src/config/plans.ts`. The $19 APEX SKU is an operator test
-  (`src/config/apexDogfood.ts`, `docs/APEX_DOGFOOD.md`) and must never appear as pricing.
-- **Facts rule:** no invented customers, logos, testimonials, metrics, or contact details. The
-  sales email is `VITE_SALES_EMAIL` — TODO: client to supply. `/demo` and the Lattice repository
-  are fictional sample data and are labelled so.
-- **Pointers:** README.md (real vs. sample vs. not built), DESIGN.md, VISUAL-PLAN.md, docs/.
+- **What:** source-risk protection for AI-assisted development. Checks code for suspicious similarity to indexed public source and shows source/license evidence for human review. Not an AI detector, not proof of copying, not legal certification.
+- **Audience:** AI-native founders and small engineering teams.
+- **Primary CTA:** **Scan a repo** → `/scan`. No account required.
+- **Live:** https://porygen.vercel.app
+- **MVP status:** working public MVP. Real public GitHub scans run in production through `api/scan.mjs`.
+- **Production scanner:** Source Search V2 under `labs/source-search-lab`, promoted from the validated lab. Do not replace it with the older production pipeline unless intentionally integrating capabilities.
+- **Current coverage:** 6 pinned files from 3 public repos (`yocto-queue`, `date-fns`, `requests`), JS/TS/Python. Always describe this as limited coverage.
+- **Current limits:** public repos only; 40 files; 100 KB/file; 750 KB total; bounded request time.
+- **Strong reporting rule:** normalized structural overlap alone is never enough. Strong matches require source-specific evidence; otherwise report possible/common or abstain.
+- **Actions:** source review, browser-local dismiss/reopen, rescan, safe resolution.
+- **Sample demo:** `/demo` is fictional data and remains secondary to the real `/scan` path.
+- **Existing stack:** React 19 + TypeScript + Vite + React Router; Vercel. Supabase/Postgres/RLS, billing, and provenance/history code remain as groundwork for the connected product but are not required for the public MVP scan.
+- **Secrets:** production `GITHUB_TOKEN` is server-side only. Never place tokens in docs or browser code.
+- **Next:** harden public endpoint → GitHub App/private repos/durable state → broaden source coverage → async scanning → push/PR automation → Stripe/APEX repo entitlements.
+- **Do not:** restart open-ended matching research without a concrete production failure; put signup ahead of the first scan; claim exhaustive coverage; expose proprietary scoring logic client-side.
+- **Pointers:** README.md, ROADMAP.md, docs/ARCHITECTURE.md, docs/SCANNER.md, docs/SECURITY.md.
