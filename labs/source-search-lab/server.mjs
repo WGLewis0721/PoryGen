@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchPublicGitHubRepository } from "./lib/github-source.mjs";
 import { scanRepository } from "./lib/scan-service.mjs";
+import { referenceIndexFromPack } from "./lib/corpus-pack.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "public");
@@ -13,7 +14,9 @@ const MAX_BODY_BYTES = 32 * 1024;
 
 async function loadReferenceIndex() {
   try {
-    return JSON.parse(await readFile(indexPath, "utf8"));
+    const legacy = JSON.parse(await readFile(indexPath, "utf8"));
+    const pack = await readFile(path.join(__dirname, "data", "corpus-pack.json"), "utf8").then(JSON.parse, () => null);
+    return pack ? referenceIndexFromPack(pack, legacy) : legacy;
   } catch (error) {
     throw new Error(`Reference index is missing or invalid. Run "npm run build:index". ${error instanceof Error ? error.message : ""}`);
   }

@@ -11,7 +11,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run && npm --prefix labs/source-search-lab test",
+    "test": "vitest run && npm --prefix labs/source-search-lab test && npm --prefix packages/source-index test",
+    "index:build": "node packages/source-index/cli.mjs build",
     "test:deployment": "node --test scripts/deployment-smoke.mjs",
     "test:watch": "vitest",
     "seed": "tsx scripts/seed-lattice.ts"
