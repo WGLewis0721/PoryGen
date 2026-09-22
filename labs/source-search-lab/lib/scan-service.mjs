@@ -6,11 +6,20 @@ const ok = (payload) => ({ status: 200, payload });
 export async function scanRepository(repositoryUrl, {
   referenceIndex,
   repositoryFetcher = fetchPublicGitHubRepository,
+  exclusions = [],
 }) {
   if (!repositoryUrl) return { status: 400, payload: { error: "Enter a public GitHub repository URL." } };
   const started = Date.now();
   try {
-    const fetched = await repositoryFetcher(repositoryUrl);
+    const fetched = await repositoryFetcher(repositoryUrl, { exclusions });
+    return scanIngestedSource(fetched, referenceIndex, started);
+  } catch (error) {
+    return { status: 502, payload: { error: error instanceof Error ? error.message : "Scan failed." } };
+  }
+}
+
+// Both source adapters converge here; retrieval, verification and reporting stay unchanged.
+export function scanIngestedSource(fetched, referenceIndex, started = Date.now()) {
     const compared = scanSourceFiles(fetched.files, referenceIndex, referenceIndex.settings);
     // Reporting filter, not a matcher change: weak shape-only similarity in tests,
     // benchmarks and tooling is overwhelmingly scaffolding, so it is not surfaced.
@@ -34,7 +43,11 @@ export async function scanRepository(repositoryUrl, {
         defaultBranch: fetched.defaultBranch,
       },
       coverage: referenceIndex.coverage,
+      source: fetched.source ?? { type: 'github' },
       scan: {
+        exclusions: fetched.stats.exclusions ?? [],
+        excludedFiles: fetched.stats.excludedFiles ?? 0,
+        ingestion: fetched.stats.ingestion ?? null,
         elapsedMs: Date.now() - started,
         fetchedFiles: fetched.stats.fetchedFiles,
         fetchedBytes: fetched.stats.fetchedBytes,
@@ -62,7 +75,4 @@ export async function scanRepository(repositoryUrl, {
       disclaimer:
         "Similarity is evidence to review, not proof of copying or AI authorship. No match means only that nothing sufficiently strong was found in this lab's indexed sources.",
     });
-  } catch (error) {
-    return { status: 502, payload: { error: error instanceof Error ? error.message : "Scan failed." } };
-  }
 }

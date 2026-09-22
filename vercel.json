@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/scan.mjs": { "maxDuration": 60, "includeFiles": "labs/source-search-lab/data/{reference-index,corpus-pack}.json" }
+    "api/scan.mjs": { "maxDuration": 60, "includeFiles": "labs/source-search-lab/{data/{reference-index,corpus-pack}.json,lib/*.mjs}" }
   },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }

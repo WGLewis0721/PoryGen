@@ -1,4 +1,5 @@
 import { detectLanguage } from "./search.mjs";
+import { exclusionRules, excludedByUser } from "./ingestion-policy.mjs";
 
 export const GITHUB_LIMITS = Object.freeze({
   maxFiles: 150,
@@ -101,7 +102,7 @@ function supportedPath(path) {
   return detectLanguage(path) !== "unknown";
 }
 
-function excludedPath(path) {
+export function excludedPath(path) {
   return path.split("/").some((part) => EXCLUDED_PATH_PARTS.has(part.toLowerCase()));
 }
 
@@ -116,7 +117,10 @@ function addIncomplete(incompleteReasons, reason, amount = 1) {
 export async function fetchPublicGitHubRepository(repoUrl, {
   fetchImpl = fetch,
   limits = GITHUB_LIMITS,
+  exclusions = [],
 } = {}) {
+  const rules = exclusionRules(exclusions);
+  let excludedFiles = 0;
   const started = Date.now();
   const deadline = started + limits.maxScanMs;
   const { owner, repo, fullName } = parseGitHubRepositoryUrl(repoUrl);
@@ -149,6 +153,12 @@ export async function fetchPublicGitHubRepository(repoUrl, {
     }
 
     supportedFilesInTree.push(entry.path);
+
+    if (excludedByUser(entry.path, rules)) {
+      excludedFiles++;
+      pushSkipped(skipped, { path: entry.path, reason: "user_excluded" }, limits);
+      continue;
+    }
 
     if (excludedPath(entry.path)) {
       pushSkipped(skipped, { path: entry.path, reason: "excluded_directory" }, limits);
@@ -236,6 +246,8 @@ export async function fetchPublicGitHubRepository(repoUrl, {
     defaultBranch: metadata.default_branch,
     files,
     stats: {
+      exclusions: rules,
+      excludedFiles,
       fetchedFiles: files.length,
       fetchedBytes: totalBytes,
       checkedFiles: files.map((file) => file.path),
