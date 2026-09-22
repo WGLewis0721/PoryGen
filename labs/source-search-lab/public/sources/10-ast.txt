@@ -1,4 +1,0 @@
-Title: Abstract syntax trees
-Tags: code, parsing, ast, similarity
-
-An abstract syntax tree represents the grammatical structure of source code. Comparing syntax trees can identify structural similarity even when variable names, whitespace, or formatting differ. AST comparison is more expensive than simple text fingerprints, so it is often useful after candidate retrieval.

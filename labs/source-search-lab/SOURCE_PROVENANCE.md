@@ -1,439 +1,259 @@
-# Source Provenance — PoryGen Source Search Lab
+# Source Provenance — Source Search Lab V2
 
-This file records the concepts, pages, and existing PoryGen design that informed the lightweight search-engine lab, and maps them to the exact lines of code or teaching content in the lab.
+This file records the external concepts, public-code corpus, and existing PoryGen code that informed V2.
 
 ## Provenance statement
 
-**No third-party source code was copied into this lab.**
+**No third-party implementation source code was copied into the V2 search engine.**
 
-The first implementation was written from:
-1. standard computer-science/search-engine concepts already known to the implementation agent,
-2. the existing PoryGen architecture and its candidate-discovery/provider model, and
-3. the Brave Search API contract as the intended external fallback.
+V2's implementation was written for this lab. Third-party source code appears only in `data/reference-index.json` as an intentionally selected **public reference corpus**, with repository, commit, path, pinned source URL, and available license metadata.
 
-After the initial implementation, the external references below were checked to create an exact, auditable bibliography. Therefore this document distinguishes:
-
-- **Direct internal precedent** — existing PoryGen design that directly shaped the lab.
-- **API contract** — external documentation that defines an API the lab calls.
-- **Concept reference / validation** — an authoritative source for a standard concept used in or described by the lab. These references validate the concept; the code was not copied from them.
-- **Original lab heuristic** — logic created specifically for this experiment and not taken from a cited algorithm.
-
-Line mappings below are against the lab snapshot at commit `95e85b15f779e7adec7127f4e0523f11e529285d`. Adding this provenance file does not change those mapped files.
+The design reuses concepts already present in PoryGen production code without importing the production package into the lab.
 
 ---
 
-## 1. Tokenization and stop words
+## 1. PoryGen's existing provider architecture
 
-### Reference
+Internal sources:
 
-Christopher D. Manning, Prabhakar Raghavan, Hinrich Schütze, *Introduction to Information Retrieval*.
+- `packages/provenance-core/src/scanner/providers/types.ts`
+- `packages/provenance-core/src/scanner/providers/staticCorpus.ts`
+- `packages/provenance-core/src/scanner/similarity.ts`
 
-- Tokenization: https://nlp.stanford.edu/IR-book/html/htmledition/tokenization-1.html
-- Stop words: https://nlp.stanford.edu/IR-book/html/htmledition/dropping-common-terms-stop-words-1.html
+Existing design used:
 
-Relevant concepts:
-- tokenization converts character sequences into tokens;
-- document and query text should use consistent tokenization;
-- common low-information terms may be removed with a stop list.
+- cheap `discoverCandidates(...)` stage;
+- precise `compareCandidate(...)` stage;
+- an inverted fingerprint index;
+- explicit coverage claims;
+- source-side and customer-side line ranges;
+- similarity classifications that do not claim copying.
 
-### Lab mapping
+V2 mirrors that **two-stage architecture** while remaining isolated JavaScript under `labs/source-search-lab`.
 
-**Concept reference / validation**
+V2 mapping:
 
-- `lib/search.mjs:1-5` — small stop-word set.
-- `lib/search.mjs:7-14` — lowercasing, punctuation cleanup, splitting, trimming, and stop-word removal.
+- `lib/search.mjs:245-293` — candidate discovery.
+- `lib/search.mjs:368-407` — precise candidate verification.
+- `lib/search.mjs:420+` — file/region orchestration.
 
-### Important note
-
-The exact regular expression, the exact stop-word list, and the implementation are original to this lab. They were not copied from the Stanford text.
-
----
-
-## 2. Basic retrieval and ranking
-
-### Reference
-
-Manning, Raghavan, Schütze, *Introduction to Information Retrieval*.
-
-- Building an inverted index: https://nlp.stanford.edu/IR-book/html/htmledition/a-first-take-at-building-an-inverted-index-1.html
-- TF-IDF / overlap scoring: https://nlp.stanford.edu/IR-book/html/htmledition/tf-idf-weighting-1.html
-
-Relevant concepts:
-- collect documents;
-- tokenize/normalize them;
-- retrieve documents matching query terms;
-- score/rank candidate documents;
-- a simple overlap score can sum occurrences of query terms.
-
-### Lab mapping
-
-**Concept reference / validation**
-
-- `lib/search.mjs:16-22` — count exact term occurrences.
-- `lib/search.mjs:24-52` — tokenize the query/documents, calculate a score, remove zero-score documents, and sort descending.
-- `server.mjs:27-34` — load the local document collection.
-- `server.mjs:90-105` — retrieve/rank local matches and return the top 10.
-
-### Original lab heuristic
-
-The actual ranking formula is **not TF-IDF**.
-
-These lines were created specifically for this experiment:
-
-- `lib/search.mjs:30-32` — split searchable content into title, tag, and body zones.
-- `lib/search.mjs:43` — title = 5 points, tag = 3 points, body = 1 point.
-- `lib/search.mjs:46-47` — query-term coverage boost.
-- `lib/search.mjs:52` — deterministic score/title sort.
-
-Those weights are intentionally simple teaching heuristics, not a published ranking algorithm.
+Classification: **direct internal design precedent**, not copied implementation.
 
 ---
 
-## 3. Existing PoryGen candidate-discovery architecture
+## 2. Winnowing / document fingerprinting
 
-### Internal reference
-
-`docs/ARCHITECTURE.md:56-78`
-
-Relevant existing PoryGen design:
-
-- `discoverCandidates(...)` performs the cheaper candidate-discovery stage.
-- `compareCandidate(...)` performs more precise comparison.
-- the current static provider uses an in-memory fingerprint index;
-- future source providers plug into the same interface.
-
-### Lab mapping
-
-**Direct internal precedent**
-
-- `server.mjs:90-105` — local corpus is searched first for candidates.
-- `server.mjs:108-116` — if local candidate retrieval returns nothing, another provider (the web search fallback) is invoked.
-- `README.md` — describes this lab as an isolated experiment for the broader source-discovery layer PoryGen still needs.
-
-The lab is deliberately text-search based. It does **not** yet implement PoryGen's production code-fingerprint search.
-
----
-
-## 4. Brave Search web fallback
-
-### Reference
-
-Brave Search API — Web Search endpoint:
-
-https://api-dashboard.search.brave.com/api-reference/web/search/post
-
-The API documentation defines:
-- the web search endpoint;
-- the `q` query parameter;
-- the `country` and `search_lang` parameters;
-- the `X-Subscription-Token` authentication header.
-
-### Lab mapping
-
-**API contract**
-
-- `server.mjs:36-43` — server-side API key lookup and unconfigured state.
-- `server.mjs:45-49` — Brave endpoint and query parameters.
-- `server.mjs:55-61` — HTTP request and `X-Subscription-Token` header.
-- `server.mjs:67-75` — parse Brave results and keep at most five.
-- `server.mjs:108-116` — invoke web search only after local search returns no matches.
-
-No Brave SDK or source code was copied. The lab makes a direct HTTP request using the documented API contract.
-
----
-
-## 5. Node.js HTTP server
-
-### Reference
-
-Node.js HTTP documentation:
-
-https://nodejs.org/api/http.html
-
-Relevant concept:
-- `http.createServer(requestListener)` creates an HTTP server and invokes the listener for requests.
-
-### Lab mapping
-
-**API contract / concept validation**
-
-- `server.mjs:1` — import Node's built-in `node:http` module.
-- `server.mjs:151-164` — create the server and route requests.
-- `server.mjs:166-169` — listen on the configured port.
-
-The routing structure and static-file implementation are original lab code.
-
----
-
-## 6. Browser Fetch API
-
-### Reference
-
-MDN — Using the Fetch API:
-
-https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
-
-Relevant concepts:
-- `fetch()` makes an HTTP request;
-- it returns a Promise containing a `Response`;
-- response data can be parsed as JSON;
-- HTTP error statuses should be checked explicitly.
-
-### Lab mapping
-
-**API contract / concept validation**
-
-- `public/app.js:40-49` — submit the query and call the lab's `/api/search` endpoint.
-- `public/app.js:50-51` — parse JSON and check `response.ok`.
-- `public/app.js:53-57` — render local-vs-web status and results.
-
----
-
-# Educational corpus provenance
-
-The 10 files under `public/sources/` are **synthetic teaching documents written for this lab**. They are not copied excerpts. Each file summarizes one concept so the local search engine has a small corpus to search.
-
-## 7. Winnowing
-
-### Teaching file
-
-`public/sources/01-winnowing.txt:1-4`
-
-### Reference
+Reference:
 
 Saul Schleimer, Daniel S. Wilkerson, Alex Aiken, **“Winnowing: Local Algorithms for Document Fingerprinting.”**
 
 https://theory.stanford.edu/~aiken/publications/papers/sigmod03.pdf
 
-**Concept reference / validation:** document fingerprinting, hashes/fingerprints, and detecting partial similarity.
+PoryGen already implements Winnowing in:
 
-The teaching paragraph is an original summary, not a quotation.
+- `packages/provenance-core/src/scanner/winnow.ts`
 
----
+V2 mapping:
 
-## 8. Inverted indexes
+- `lib/search.mjs:101-108` — deterministic FNV-1a hash.
+- `lib/search.mjs:110-119` — token shingles.
+- `lib/search.mjs:121-145` — rightmost-minimum Winnowing selection.
 
-### Teaching file
+Classification: **algorithm/concept reference plus internal precedent**.
 
-`public/sources/02-inverted-index.txt:1-4`
-
-### Reference
-
-Manning, Raghavan, Schütze, **“A first take at building an inverted index.”**
-
-https://nlp.stanford.edu/IR-book/html/htmledition/a-first-take-at-building-an-inverted-index-1.html
-
-**Concept reference / validation:** map terms to the documents in which they occur so retrieval does not require re-reading the entire collection.
-
-The current lab does not build a persisted inverted index; its tiny 10-document corpus is intentionally searched in memory.
+The V2 JavaScript was written specifically for the lab and was not copied from the paper.
 
 ---
 
-## 9. PageRank
+## 3. Identifier normalization
 
-### Teaching file
+Internal reference:
 
-`public/sources/03-pagerank.txt:1-4`
+- `packages/provenance-core/src/scanner/lexicalNormalize.ts`
 
-### Reference
+Existing PoryGen behavior collapses developer-chosen identifiers and literals while preserving keywords/punctuation so variable renaming and formatting changes have less effect.
 
-Manning, Raghavan, Schütze, **“PageRank.”**
+V2 deliberately keeps **two** signals. The preserving representation keeps identifier names and literal spelling; the normalized representation collapses identifiers to `ID` and supported literals to `LIT`. JavaScript private identifiers such as `#head` are tokenized as identifiers rather than Python-style comments. Python single-, double-, and triple-quoted strings are treated as literals.
 
-https://nlp.stanford.edu/IR-book/html/htmledition/pagerank-1.html
+V2 mapping:
 
-**Concept reference / validation:** link analysis can contribute an authority signal when ranking web pages.
+- `lib/search.mjs` tokenizer section — language-specific lexical tokenization plus preserving/normalized output.
+- `lib/search.mjs` reference-index builder — build both representations into the public reference index.
 
-PageRank is teaching content only. **No PageRank algorithm is implemented in the lab.**
+JavaScript and TypeScript are treated as compatible candidate languages. Python remains Python-only.
 
----
-
-## 10. TF-IDF
-
-### Teaching file
-
-`public/sources/04-tfidf.txt:1-4`
-
-### Reference
-
-Manning, Raghavan, Schütze, **“Tf-idf weighting.”**
-
-https://nlp.stanford.edu/IR-book/html/htmledition/tf-idf-weighting-1.html
-
-**Concept reference / validation:** combine term frequency and inverse document frequency to weight discriminative terms.
-
-TF-IDF is teaching content only. **The current ranker does not implement TF-IDF.**
+Classification: **direct internal design precedent**.
 
 ---
 
-## 11. Hash tables
+## 4. Inverted retrieval and rarity weighting
 
-### Teaching file
+Concept reference:
 
-`public/sources/05-hash-tables.txt:1-4`
+Christopher D. Manning, Prabhakar Raghavan, Hinrich Schütze, *Introduction to Information Retrieval*.
 
-### Reference
+- Inverted indexes: https://nlp.stanford.edu/IR-book/html/htmledition/a-first-take-at-building-an-inverted-index-1.html
+- IDF intuition: https://nlp.stanford.edu/IR-book/html/htmledition/inverse-document-frequency-1.html
 
-NIST Dictionary of Algorithms and Data Structures — **“hash table.”**
+V2 mapping:
 
-https://xlinux.nist.gov/dads/HTML/hashtab.html
+- `lib/search.mjs:156-197` — prebuild fingerprint postings.
+- `lib/search.mjs` candidate retrieval — query postings from both representations, filter to compatible languages, combine candidate lists, calculate an IDF-like weight, and downweight fingerprints common across much of the corpus. Each query fingerprint contributes at most once per candidate document; repeated occurrences remain only as location evidence.
 
-**Concept reference / validation:** a dictionary structure that maps keys to positions using a hash function.
-
-Hash tables are teaching content only. The lab does not implement its own hash table.
-
----
-
-## 12. HTTP / API requests
-
-### Teaching file
-
-`public/sources/06-rest-api.txt:1-4`
-
-### Reference
-
-MDN — **Overview of HTTP**
-
-https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Overview
-
-**Concept reference / validation:** HTTP uses a client/server request-response model and is commonly used by programmatic APIs.
-
-The source file uses “REST API” as an introductory label; the lab itself only requires ordinary HTTP/JSON behavior and does not depend on a formal REST architecture.
+The exact weighting rule and 0.60 common-fingerprint cutoff are **original experimental lab heuristics**, not implementations from the text.
 
 ---
 
-## 13. GitHub Apps
+## 5. Ordered token verification
 
-### Teaching file
+Concept reference:
 
-`public/sources/07-github-apps.txt:1-4`
+NIST Dictionary of Algorithms and Data Structures — **Longest Common Subsequence**:
 
-### References
+https://xlinux.nist.gov/dads/HTML/longestCommonSubsequence.html
 
-GitHub Docs — **Installing a GitHub App from a third party**
+V2 uses two order-aware measurements:
 
-https://docs.github.com/en/apps/using-github-apps/installing-a-github-app-from-a-third-party
+- longest common subsequence length to estimate order-preserving coverage;
+- longest common contiguous token block to anchor actual matching lines.
 
-GitHub Docs — **Choosing permissions for a GitHub App**
+V2 mapping:
 
-https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app
+- `lib/search.mjs:295-312` — rolling-row LCS length.
+- `lib/search.mjs:314-342` — longest contiguous token block.
+- `lib/search.mjs:368-407` — separate customer/source coverage and experimental evidence gate.
 
-GitHub Docs — **REST API endpoints for GitHub Apps / installation access tokens**
-
-https://docs.github.com/en/rest/apps/apps
-
-**Concept reference / validation:** selected-repository installation, narrowly scoped permissions, and installation access tokens.
-
-GitHub Apps are teaching content only in this lab. The lab does not authenticate to customer repositories.
+The code is an original lab implementation of standard dynamic-programming concepts.
 
 ---
 
-## 14. SPDX identifiers
+## 6. GitHub repository retrieval
 
-### Teaching file
+References:
 
-`public/sources/08-spdx.txt:1-4`
+GitHub REST API:
 
-### Reference
+- Repositories: https://docs.github.com/en/rest/repos/repos#get-a-repository
+- Commits: https://docs.github.com/en/rest/commits/commits#get-a-commit
+- Git trees: https://docs.github.com/en/rest/git/trees#get-a-tree
+- Git blobs: https://docs.github.com/en/rest/git/blobs#get-a-blob
 
-SPDX — **SPDX License List**
+V2 mapping:
 
-https://spdx.org/licenses/
+- `lib/github-source.mjs:3-10` — resource limits.
+- `lib/github-source.mjs:16-34` — strict `https://github.com/owner/repo` parsing.
+- `lib/github-source.mjs:46-59` — bounded GitHub API JSON request.
+- `lib/github-source.mjs:73+` — resolve commit/tree, filter supported files, fetch blobs.
 
-**Concept reference / validation:** SPDX provides standardized short identifiers for commonly found licenses and exceptions.
-
-SPDX is teaching content only in this lab.
-
----
-
-## 15. Small Node HTTP server
-
-### Teaching file
-
-`public/sources/09-node-server.txt:1-4`
-
-### Reference
-
-Node.js HTTP documentation:
-
-https://nodejs.org/api/http.html
-
-**Concept reference / validation:** Node provides a built-in low-level HTTP server API.
-
-This concept is also actually used by `server.mjs:1` and `server.mjs:151-169`.
+The lab constructs its own GitHub API URLs. It does not accept arbitrary customer-supplied fetch destinations.
 
 ---
 
-## 16. Syntax trees / AST-style structural analysis
+## 7. HTTP privacy behavior
 
-### Teaching file
+References:
 
-`public/sources/10-ast.txt:1-4`
+- OWASP ASVS 5.0 General Data Protection: https://cornucopia.owasp.org/taxonomy/asvs-5.0/14-data-protection/02-general-data-protection
+- MDN Cache-Control: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control
+- OWASP MASWE-0005: https://mas.owasp.org/MASWE/MASVS-STORAGE/MASWE-0005/
 
-### Reference
+V2 mapping:
 
-Tree-sitter — **Introduction**
+- `server.mjs:22-31` — `no-store`, no-cache, no-referrer response headers.
+- `server.mjs:52-112` — POST-body scan input and result generation.
+- `server.mjs:134+` — POST-only `/api/scan`.
+- `public/app.js:163+` — browser POST with `cache: "no-store"`.
 
-https://tree-sitter.github.io/tree-sitter/
-
-Tree-sitter documents that it builds a concrete syntax tree representing source code.
-
-### PoryGen-specific interpretation
-
-The teaching file's statement that syntax-tree structure can be useful for code-similarity analysis is a **PoryGen design hypothesis / standard program-analysis concept**, not a claim taken verbatim from Tree-sitter documentation.
-
-No syntax-tree comparison is implemented in this lab.
+The lab does not send customer source to a public web-search provider.
 
 ---
 
-# User-specified behavior
+# Public reference corpus
 
-Several important design decisions came directly from the experiment requirements rather than an external source:
+The following source is intentionally stored as **reference data** in the V2 index.
 
-- exactly **10 local sources**;
-- local search happens first;
-- web search happens only if local search returns no match;
-- web fallback returns **5** results;
-- intentionally simple HTML page with one search bar;
-- deliberately undergrad/high-school complexity.
+## sindresorhus/yocto-queue
 
-Code implementing those requirements:
+Commit:
 
-- `server.mjs:90-116`
-- `public/app.js:40-57`
-- `public/index.html` (search UI)
+`72a8fa96a9d389765cdf2bb9c6daba8302fc375d`
+
+Indexed file:
+
+- `index.js`
+- blob `627ed535f3163b37f2e3b208a23788fd0a715eba`
+- source: https://github.com/sindresorhus/yocto-queue/blob/72a8fa96a9d389765cdf2bb9c6daba8302fc375d/index.js
+- license metadata: MIT
+- license: https://github.com/sindresorhus/yocto-queue/blob/72a8fa96a9d389765cdf2bb9c6daba8302fc375d/license
+
+## date-fns/date-fns
+
+Commit:
+
+`18cbd436f1428d0f45f89f710df65f62546c42f0`
+
+Indexed files:
+
+- `pkgs/core/src/addBusinessDays/index.ts` — blob `5199659960a152c310456b8de0e465fb015ece43`
+- `pkgs/core/src/addDays/index.ts` — blob `0b623dbff124a9f59d7cfab1c1117d1ac8e04e84`
+- `pkgs/core/src/_lib/normalizeInterval/index.ts` — blob `4f80ca8628c1ca9ca5e531cb4dc4bc608142c191`
+
+Pinned source root:
+
+https://github.com/date-fns/date-fns/tree/18cbd436f1428d0f45f89f710df65f62546c42f0/pkgs/core/src
+
+License metadata: MIT
+
+https://github.com/date-fns/date-fns/blob/18cbd436f1428d0f45f89f710df65f62546c42f0/pkgs/core/LICENSE.md
+
+## psf/requests
+
+Commit:
+
+`611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60`
+
+Indexed files:
+
+- `src/requests/structures.py` — blob `7675eaf15a181dada66c02bb0468dc00d6f523b3`
+- `src/requests/hooks.py` — blob `11ff9e9f27e76f5ef6b9b609e88c2f418d655e16`
+
+Pinned source root:
+
+https://github.com/psf/requests/tree/611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60/src/requests
+
+License metadata: Apache-2.0
+
+https://github.com/psf/requests/blob/611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60/LICENSE
 
 ---
 
-# What is original to this lab
+# Reference-index construction
 
-The following implementation choices are original and should not be attributed to the external references above:
+`config/reference-sources.json` is the human-readable manifest.
 
-- the 5/3/1 title/tag/body weighting;
-- the query-term coverage multiplier;
-- loading the 10 source files directly into memory at process startup;
-- local-first/web-fallback control flow;
-- the HTML/CSS visual design;
-- the result-card rendering;
-- the eight-second Brave request timeout;
-- the synthetic wording of all 10 teaching documents;
-- the tests and test fixtures.
+`scripts/build-index.mjs:21+` fetches only the configured pinned blobs and verifies the expected blob SHA.
+
+`scripts/build-index.mjs:44+` calls the lab's index builder and writes `data/reference-index.json`.
+
+The customer scan reads this prebuilt index. It does not rebuild it.
 
 ---
 
-# Relationship to future PoryGen work
+# Original V2 choices
 
-This lab demonstrates only the fundamental retrieval loop:
+These choices were created for the PoryGen experiment and should not be attributed to an external source:
 
-```
-query
-→ normalize/tokenize
-→ search a known corpus
-→ score candidates
-→ rank candidates
-→ fall back to a broader search source
-→ return the best matches
-```
+- dual identifier-preserving + identifier-normalized indexes;
+- 7-token shingles with a Winnowing window of 4 for V2;
+- approximately 120-token overlapping regions with 60-token stride;
+- union of both candidate lists;
+- shortlist of 20 candidates per region;
+- IDF-like downweighting of corpus-common fingerprints;
+- LCS plus contiguous-span confirmation;
+- starting gates of 24 ordered tokens, 12 contiguous tokens, and 60% smaller-side coverage;
+- common-pattern softening;
+- three customer-facing classes;
+- browser-memory-only dismissal behavior;
+- rescan comparison against the newly resolved repository commit.
 
-A future PoryGen source-search subsystem would replace ordinary word tokens with code-aware signals such as fingerprints, token sequences, syntax structures, rarity statistics, and repository/file metadata. It would also need a much larger indexed corpus and stronger evaluation.
-
-This lab should therefore remain an educational experiment until its concepts are reimplemented and benchmarked for source-code retrieval.
+Those are experimental settings, not validated probabilities or proof of provenance.

@@ -1,4 +1,0 @@
-Title: TF-IDF ranking
-Tags: search, ranking, relevance, tfidf
-
-TF-IDF gives more weight to words that are frequent in one document but uncommon across the full collection. It is a classic way to estimate which documents are most relevant to a text query without using machine learning or a large language model.

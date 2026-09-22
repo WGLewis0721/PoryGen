@@ -1,0 +1,35 @@
+name: Source Search Lab V2
+
+on:
+  push:
+    branches:
+      - lab/source-search-v2
+    paths:
+      - "labs/source-search-lab/**"
+      - ".github/workflows/source-search-lab-v2.yml"
+  pull_request:
+    paths:
+      - "labs/source-search-lab/**"
+      - ".github/workflows/source-search-lab-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Unit and integration tests
+        working-directory: labs/source-search-lab
+        run: npm test
+      - name: Live public GitHub fixture
+        working-directory: labs/source-search-lab
+        run: npm run test:public

@@ -1,10 +1,22 @@
-const form = document.querySelector("#search-form");
-const queryInput = document.querySelector("#query");
+import { analyzeRescanResolution } from "./resolution.mjs";
+
+const form = document.querySelector("#scan-form");
+const repositoryInput = document.querySelector("#repository-url");
+const scanButton = document.querySelector("#scan-button");
 const status = document.querySelector("#status");
+const progressWrap = document.querySelector("#progress-wrap");
+const progressLabel = document.querySelector("#progress-label");
 const results = document.querySelector("#results");
+const scanMeta = document.querySelector("#scan-meta");
+const resolvedBox = document.querySelector("#resolved");
+const template = document.querySelector("#finding-template");
+
+const dismissals = new Map();
+let previousScan = null;
+let lastRepositoryUrl = "";
 
 function escapeHtml(value = "") {
-  return value
+  return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -12,50 +24,212 @@ function escapeHtml(value = "") {
     .replaceAll("'", "&#039;");
 }
 
-function renderResults(data) {
-  if (!data.results?.length) {
-    const message = data.source === "web" && data.webConfigured === false
-      ? "No local matches. Web fallback is ready in the code, but BRAVE_SEARCH_API_KEY is not configured."
-      : "No results found.";
-    results.innerHTML = `<p class="empty">${escapeHtml(message)}</p>`;
+function pct(value) {
+  return `${Math.round((value ?? 0) * 100)}%`;
+}
+
+function lineLabel(range) {
+  if (!range) return "No matching line range";
+  return range.start === range.end ? `line ${range.start}` : `lines ${range.start}-${range.end}`;
+}
+
+function classificationLabel(value) {
+  if (value === "strong_match") return "Strong match";
+  if (value === "possible_common_pattern") return "Possible / common pattern";
+  return "Insufficient evidence";
+}
+
+function matchIds(scan) {
+  return new Set(
+    (scan?.findings ?? [])
+      .filter((finding) => finding.classification !== "insufficient_evidence")
+      .map((finding) => finding.id),
+  );
+}
+
+function renderMeta(data) {
+  const { repository, scan, coverage, summary } = data;
+  scanMeta.hidden = false;
+  scanMeta.innerHTML = `
+    <div class="meta-grid">
+      <span><strong>Repository:</strong> ${escapeHtml(repository.name)}</span>
+      <span><strong>Commit:</strong> <a href="${escapeHtml(repository.commitUrl)}" target="_blank" rel="noreferrer">${escapeHtml(repository.commit.slice(0, 12))}</a></span>
+      <span><strong>Fetched:</strong> ${scan.fetchedFiles} files / ${Math.round(scan.fetchedBytes / 1024)} KB</span>
+      <span><strong>Time:</strong> ${scan.elapsedMs} ms</span>
+      <span><strong>Findings:</strong> ${summary.strong} strong, ${summary.possible} possible</span>
+    </div>
+    <p>${escapeHtml(coverage.claim)}</p>
+    ${scan.partial ? `<p class="warning"><strong>Partial scan.</strong> Some files or provider operations were skipped. Skipped: ${scan.skippedCount}; provider errors: ${scan.providerErrors.length}.</p>` : ""}
+    ${scan.skipped?.length ? `<details class="warning"><summary>Skipped file details</summary><ul>${scan.skipped.slice(0, 20).map((item) => `<li>${escapeHtml(item.path)}: ${escapeHtml(item.reason)}</li>`).join("")}</ul></details>` : ""}
+    ${scan.providerErrors?.length ? `<details class="warning"><summary>Provider errors</summary><ul>${scan.providerErrors.map((item) => `<li>${escapeHtml(item.file ?? "")}: ${escapeHtml(item.message)}</li>`).join("")}</ul></details>` : ""}
+    <p><small>${escapeHtml(data.disclaimer)}</small></p>
+    <button id="rescan-button" type="button">Rescan current repository</button>
+  `;
+  document.querySelector("#rescan-button").addEventListener("click", () => runScan(lastRepositoryUrl, true));
+}
+
+function renderResolved(data) {
+  resolvedBox.hidden = true;
+  resolvedBox.innerHTML = "";
+
+  const { resolved, unverified } = analyzeRescanResolution(previousScan, data);
+  if (resolved.length === 0 && unverified.length === 0) return;
+
+  const sections = [];
+  if (resolved.length > 0) {
+    sections.push(`
+      <strong>No longer found after rescan</strong>
+      <ul>${resolved.map((finding) => `<li>${escapeHtml(finding.customer.path)}</li>`).join("")}</ul>
+    `);
+  }
+  if (unverified.length > 0) {
+    sections.push(`
+      <strong>Status not changed: file was not successfully rechecked</strong>
+      <ul>${unverified.map((finding) => `<li>${escapeHtml(finding.customer.path)}</li>`).join("")}</ul>
+    `);
+  }
+
+  resolvedBox.hidden = false;
+  resolvedBox.innerHTML = sections.join("");
+}
+
+function renderFindings(data) {
+  results.innerHTML = "";
+  const previousIds = matchIds(previousScan);
+  const commitChanged = previousScan &&
+    previousScan.repository.name === data.repository.name &&
+    previousScan.repository.commit !== data.repository.commit;
+
+  // Abstention is a normal, successful outcome. When nothing in the scan cleared
+  // the reporting gate, show one clear message instead of a grey card per file.
+  const actionableFindings = data.findings.filter((finding) => finding.classification !== "insufficient_evidence");
+  if (actionableFindings.length === 0) {
+    const notice = document.createElement("p");
+    notice.className = "abstention-notice";
+    notice.textContent = "No sufficiently specific source match found in the indexed corpus.";
+    results.appendChild(notice);
     return;
   }
 
-  results.innerHTML = data.results.map((item, index) => {
-    const local = item.source === "local";
-    const meta = local
-      ? `Local source · rank ${index + 1} · score ${item.score}`
-      : `Web result · rank ${index + 1}`;
+  for (const finding of actionableFindings) {
+    const fragment = template.content.cloneNode(true);
+    const card = fragment.querySelector(".finding");
+    card.classList.add(finding.classification);
 
-    return `
-      <article class="result">
-        <div class="meta">${escapeHtml(meta)}</div>
-        <h2><a href="${escapeHtml(item.url)}" ${local ? "" : 'target="_blank" rel="noreferrer"'}>${escapeHtml(item.title)}</a></h2>
-        <p>${escapeHtml(item.snippet || "")}</p>
-      </article>
-    `;
-  }).join("");
+    fragment.querySelector(".classification").textContent = classificationLabel(finding.classification);
+    fragment.querySelector(".finding-title").textContent = finding.customer.path;
+    fragment.querySelector(".explanation").textContent = finding.explanation;
+
+    const rescanState = fragment.querySelector(".rescan-state");
+    if (commitChanged && finding.classification !== "insufficient_evidence") {
+      rescanState.textContent = previousIds.has(finding.id) ? "Still present after rescan" : "New on this commit";
+    }
+
+    const metrics = fragment.querySelector(".metrics");
+    if (finding.metrics) {
+      metrics.innerHTML = `
+        <span>customer coverage ${pct(finding.metrics.customerCoverage)}</span>
+        <span>source coverage ${pct(finding.metrics.sourceCoverage)}</span>
+        <span>ordered match ${finding.metrics.matchedTokens} tokens</span>
+        <span>contiguous ${finding.metrics.contiguousTokens} tokens</span>
+      `;
+    }
+
+    fragment.querySelector(".customer-location").textContent =
+      `${finding.customer.path} · ${lineLabel(finding.customer.lines)}`;
+    fragment.querySelector(".customer-code").textContent = finding.customer.excerpt || "No code excerpt for this classification.";
+
+    if (finding.publicSource) {
+      fragment.querySelector(".source-location").textContent =
+        `${finding.publicSource.repository}/${finding.publicSource.path} · ${lineLabel(finding.publicSource.lines)}`;
+      fragment.querySelector(".source-code").textContent = finding.publicSource.excerpt || "";
+      const review = fragment.querySelector(".review-source");
+      const lineAnchor = finding.publicSource.lines
+        ? `#L${finding.publicSource.lines.start}-L${finding.publicSource.lines.end}`
+        : "";
+      review.href = finding.publicSource.url + lineAnchor;
+
+      const license = fragment.querySelector(".license");
+      license.innerHTML = finding.publicSource.licenseUrl
+        ? `License metadata: <a href="${escapeHtml(finding.publicSource.licenseUrl)}" target="_blank" rel="noreferrer">${escapeHtml(finding.publicSource.license)}</a>`
+        : `License metadata: ${escapeHtml(finding.publicSource.license)}`;
+
+      const reason = fragment.querySelector(".dismiss-reason");
+      const dismissButton = fragment.querySelector(".dismiss-button");
+      const dismissedNote = fragment.querySelector(".dismissed-note");
+
+      function applyDismissed() {
+        const value = dismissals.get(finding.id);
+        if (!value) return;
+        card.classList.add("dismissed");
+        dismissedNote.hidden = false;
+        dismissedNote.textContent = `Dismissed for this browser session: ${value}.`;
+        dismissButton.disabled = true;
+        reason.disabled = true;
+      }
+
+      dismissButton.addEventListener("click", () => {
+        dismissals.set(finding.id, reason.options[reason.selectedIndex].text);
+        applyDismissed();
+      });
+      applyDismissed();
+    }
+
+    results.appendChild(fragment);
+  }
 }
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const q = queryInput.value.trim();
-  if (!q) return;
+async function runScan(repositoryUrl, isRescan = false) {
+  const url = String(repositoryUrl || "").trim();
+  if (!url) return;
 
-  status.textContent = "Searching 10 local sources…";
-  results.innerHTML = "";
+  lastRepositoryUrl = url;
+  scanButton.disabled = true;
+  progressWrap.hidden = false;
+  progressLabel.textContent = isRescan
+    ? "Fetching the repository's current commit and rescanning…"
+    : "Fetching repository, retrieving candidates, and verifying matches…";
+  status.textContent = "Scan in progress.";
+  if (!isRescan) {
+    results.innerHTML = "";
+    scanMeta.hidden = true;
+    resolvedBox.hidden = true;
+  }
 
   try {
-    const response = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const response = await fetch("/api/scan", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
+      cache: "no-store",
+      body: JSON.stringify({ repositoryUrl: url }),
+    });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Search failed.");
+    if (!response.ok) throw new Error(data.error || "Scan failed.");
 
-    status.textContent = data.source === "local"
-      ? `Found matches in the local 10-source corpus. No web search needed.`
-      : `No local match. Searched the web for up to 5 results.`;
+    renderResolved(data);
+    renderMeta(data);
+    renderFindings(data);
 
-    renderResults(data);
+    const changed = previousScan &&
+      previousScan.repository.name === data.repository.name &&
+      previousScan.repository.commit !== data.repository.commit;
+    status.textContent = changed
+      ? `Rescan complete on new commit ${data.repository.commit.slice(0, 12)}.`
+      : `Scan complete on commit ${data.repository.commit.slice(0, 12)}.`;
+
+    previousScan = data;
   } catch (error) {
-    status.textContent = error.message || "Search failed.";
+    status.textContent = error instanceof Error ? error.message : "Scan failed.";
+  } finally {
+    scanButton.disabled = false;
+    progressWrap.hidden = true;
   }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  runScan(repositoryInput.value, false);
 });
