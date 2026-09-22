@@ -62,7 +62,7 @@ function PlanCta({ plan }: { plan: CommercialPlan }) {
   const { user } = useAuth();
   if (plan.id === "free") {
     return (
-      <Link to={user ? "/repositories/new" : "/sign-up"} className="btn btn-secondary btn-block">
+      <Link to="/scan" className="btn btn-secondary btn-block">
         Start free
       </Link>
     );

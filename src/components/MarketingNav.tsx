@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { useAuth } from "../features/auth/AuthContext";
 import { Wordmark } from "./Wordmark";
+import { isSupabaseConfigured } from "../lib/supabaseClient";
 
 const LINKS = [
   { to: "/how-it-works", label: "How it works" },
@@ -64,10 +65,12 @@ export function MarketingNav({ overlay = false }: { overlay?: boolean }) {
             </Link>
           ) : (
             <>
-              <Link to="/sign-in" className="site-signin">
-                Sign in
-              </Link>
-              <Link to="/sign-up" className="btn btn-primary btn-sm site-cta">
+              {isSupabaseConfigured && (
+                <Link to="/sign-in" className="site-signin">
+                  Sign in
+                </Link>
+              )}
+              <Link to="/scan" className="btn btn-primary btn-sm site-cta">
                 Scan a repo
               </Link>
             </>
@@ -91,12 +94,12 @@ export function MarketingNav({ overlay = false }: { overlay?: boolean }) {
               {link.label}
             </NavLink>
           ))}
-          {!user && (
+          {!user && isSupabaseConfigured && (
             <NavLink to="/sign-in" className="site-menu-link">
               Sign in
             </NavLink>
           )}
-          <Link to={user ? "/dashboard" : "/sign-up"} className="btn btn-primary btn-block">
+          <Link to={user ? "/dashboard" : "/scan"} className="btn btn-primary btn-block">
             {user ? "Open app" : "Scan a repo"}
           </Link>
         </nav>

@@ -1,0 +1,25 @@
+.ps { padding-block: var(--space-7) var(--space-9); display: flex; flex-direction: column; gap: var(--space-5); max-width: 1100px; }
+.ps-title { font-size: clamp(2rem, 5vw, 3rem); margin: 0; }
+.ps-intro .lede { max-width: 65ch; margin-top: var(--space-3); }
+.ps-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.ps-row .input { flex: 1 1 18rem; min-width: 0; }
+.ps-linkbtn { background: none; border: 0; padding: 0; color: var(--sunrise-400); text-decoration: underline; cursor: pointer; font-size: inherit; }
+.ps-result { display: flex; flex-direction: column; gap: var(--space-4); }
+.ps-heading { font-size: clamp(1.4rem, 3.5vw, 2rem); margin: 0; }
+.ps-heading:focus { outline: none; }
+.ps-meta { color: var(--mist-400); font-size: var(--text-sm); margin: 0; overflow-wrap: anywhere; }
+.ps-findings { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-5); }
+.ps-finding { border: 1px solid var(--line-strong); border-left: 3px solid var(--common); border-radius: var(--radius-sm); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.ps-finding.is-strong { border-left-color: var(--strong); }
+.ps-finding.is-dismissed { opacity: 0.7; }
+.ps-finding-head { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.ps-finding-title { font-size: var(--text-md); margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.ps-explain { margin: 0; color: var(--cloud-300); font-size: var(--text-sm); }
+.ps-facts { display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; margin: 0; font-size: var(--text-sm); }
+.ps-facts dt { color: var(--mist-500); font-size: var(--text-xs); }
+.ps-facts dd { margin: 0; color: var(--cloud-100); }
+.ps-actions, .ps-dismiss, .ps-footer-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+.ps-actions svg { width: 1em; height: 1em; }
+.ps-demo-link { margin-top: var(--space-4); }
+.ps-possible > summary { cursor: pointer; color: var(--cloud-300); font-size: var(--text-sm); padding-block: 0.5rem; }
+.ps-possible[open] > summary { margin-bottom: var(--space-4); }

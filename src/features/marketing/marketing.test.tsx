@@ -20,7 +20,7 @@ describe("homepage", () => {
     renderAt(<LandingPage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Move fast.Keep it yours.");
     expect(screen.getByText(/checks the code AI agents put into your product/i)).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /^scan a repo$/i })[0]).toHaveAttribute("href", "/sign-up");
+    expect(screen.getAllByRole("link", { name: /^scan a repo$/i })[0]).toHaveAttribute("href", "/scan");
     expect(screen.getAllByRole("link", { name: /see live demo/i })[0]).toHaveAttribute("href", "/demo");
   });
 

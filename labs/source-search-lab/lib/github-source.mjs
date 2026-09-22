@@ -21,7 +21,7 @@ export function parseGitHubRepositoryUrl(value) {
     throw new Error("Enter a valid public GitHub repository URL.");
   }
   if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "github.com") {
-    throw new Error("Only https://github.com public repository URLs are supported in this lab.");
+    throw new Error("Only https://github.com public repository URLs are supported.");
   }
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts.length < 2) throw new Error("Repository URL must look like https://github.com/owner/repo.");
@@ -43,15 +43,35 @@ function headers() {
   return result;
 }
 
+async function githubRaw(url, fetchImpl, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(url, {
+      headers: { "User-Agent": headers()["User-Agent"] },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}.`);
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function githubJson(url, fetchImpl, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(url, { headers: headers(), signal: controller.signal, cache: "no-store" });
     if (!response.ok) {
+      const rateLimited = (response.status === 403 || response.status === 429) &&
+        response.headers?.get?.("x-ratelimit-remaining") === "0";
       const hint = response.status === 404
         ? "Repository or file was not found, or it is not public."
-        : `GitHub returned HTTP ${response.status}.`;
+        : rateLimited
+          ? "GitHub's rate limit for this server has been reached. Try again in a few minutes."
+          : `GitHub returned HTTP ${response.status}.`;
       throw new Error(hint);
     }
     return await response.json();
@@ -87,7 +107,7 @@ export async function fetchPublicGitHubRepository(repoUrl, {
 
   const remaining = () => Math.max(500, deadline - Date.now());
   const metadata = await githubJson(base, fetchImpl, remaining());
-  if (metadata.private) throw new Error("This lab accepts public GitHub repositories only.");
+  if (metadata.private) throw new Error("Only public GitHub repositories can be scanned.");
 
   const commitInfo = await githubJson(
     `${base}/commits/${encodeURIComponent(metadata.default_branch)}`,
@@ -153,14 +173,9 @@ export async function fetchPublicGitHubRepository(repoUrl, {
     }
 
     try {
-      const blob = await githubJson(`${base}/git/blobs/${entry.sha}`, fetchImpl, remaining());
-      if (blob.encoding !== "base64" || typeof blob.content !== "string") {
-        addIncomplete(incompleteReasons, "unsupported_blob_encoding");
-        pushSkipped(skipped, { path: entry.path, reason: "unsupported_blob_encoding" }, limits);
-        continue;
-      }
-
-      const source = Buffer.from(blob.content.replace(/\n/g, ""), "base64").toString("utf8");
+      // Raw content is served outside the REST API quota, so a scan costs three API calls.
+      const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${commit}/${entry.path.split("/").map(encodeURIComponent).join("/")}`;
+      const source = await githubRaw(rawUrl, fetchImpl, remaining());
       const bytes = Buffer.byteLength(source, "utf8");
       if (bytes > limits.maxFileBytes) {
         addIncomplete(incompleteReasons, "decoded_file_too_large");
