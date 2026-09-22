@@ -4,6 +4,7 @@ import { ExternalLink, ScanSearch } from "lucide-react";
 import { CodeCompare } from "../../components/CodeCompare";
 import { useDocumentTitle } from "../../components/useDocumentTitle";
 import { getTermsAcceptance } from "../legal/termsAcceptance";
+import { LICENSE_HEADLINE, LICENSE_MEANING, licensePolicy, POLICY_TONE } from "./licenseGuidance";
 import type { Finding, Range, ScanResult } from "./types";
 import {
   ScanInputError,
@@ -30,8 +31,21 @@ import {
 } from "./scanRequest";
 import "./public-scan.css";
 
-type Decision = { status: "reviewing" | "dismissed"; reason?: string; at: string };
+/** "reviewing" / "dismissed" predate the pre-launch actions; stored decisions stay readable. */
+type DecisionStatus = "reviewing" | "dismissed" | "replace" | "rewrite" | "accepted";
+type Decision = { status: DecisionStatus; reason?: string; at: string };
 type Decisions = Record<string, Decision>;
+
+const DECISION_LABEL: Record<DecisionStatus, string> = {
+  reviewing: "In review",
+  dismissed: "Dismissed",
+  replace: "Planned: replace with a library",
+  rewrite: "Planned: rewrite",
+  accepted: "Accepted and documented",
+};
+
+/** A decision that settles the finding for launch, as opposed to merely opening it. */
+const isSettled = (decision?: Decision) => decision !== undefined && decision.status !== "reviewing";
 type SourceMode = "github" | "zip" | "files";
 type FolderNote = {
   sent: number;
@@ -102,16 +116,31 @@ const sourceHref = (finding: Finding) => {
 
 function FindingCard({ finding, decision, onDecide }: { finding: Finding; decision?: Decision; onDecide: (d: Decision | null) => void }) {
   const [reason, setReason] = useState(DISMISS_REASONS[0]);
+  const [note, setNote] = useState("");
+  const [openAction, setOpenAction] = useState<"dismiss" | "accept" | null>(null);
   const strong = finding.classification === "strong_match";
   const source = finding.publicSource!;
-  const dismissed = decision?.status === "dismissed";
+  const settled = isSettled(decision);
   const href = sourceHref(finding);
+  const policy = licensePolicy(source.license);
+
+  const record = (status: DecisionStatus, text?: string) => {
+    onDecide({ status, reason: text, at: new Date().toISOString() });
+    setOpenAction(null);
+    setNote("");
+  };
 
   return (
-    <li className={`ps-finding${strong ? " is-strong" : ""}${dismissed ? " is-dismissed" : ""}`}>
+    <li className={`ps-finding${strong ? " is-strong" : ""}${settled ? " is-dismissed" : ""}`}>
       <div className="ps-finding-head">
         <span className={`tag ${strong ? "tag-strong" : "tag-common"}`}>{strong ? "Strong match" : "Possible / common pattern"}</span>
-        {decision && <span className="tag tag-neutral">{dismissed ? `Dismissed: ${decision.reason}` : "In review"}</span>}
+        <span className={`tag tag-${POLICY_TONE[policy]}`}>{LICENSE_HEADLINE[policy]}</span>
+        {decision && (
+          <span className="tag tag-neutral">
+            {DECISION_LABEL[decision.status]}
+            {decision.reason ? `: ${decision.reason}` : ""}
+          </span>
+        )}
       </div>
       <h3 className="ps-finding-title">
         Affected file <span className="mono">{finding.customer.path}</span> {lineLabel(finding.customer.lines)}
@@ -139,6 +168,10 @@ function FindingCard({ finding, decision, onDecide }: { finding: Finding; decisi
           </dd>
         </div>
         <div>
+          <dt>What that license may require</dt>
+          <dd>{LICENSE_MEANING[policy]}</dd>
+        </div>
+        <div>
           <dt>Why it matched</dt>
           <dd>{whyItMatched(finding)}</dd>
         </div>
@@ -152,7 +185,7 @@ function FindingCard({ finding, decision, onDecide }: { finding: Finding; decisi
         </div>
       </dl>
 
-      {!dismissed && finding.customer.lines && source.lines && finding.customer.excerpt && source.excerpt && (
+      {!settled && finding.customer.lines && source.lines && finding.customer.excerpt && source.excerpt && (
         <CodeCompare
           left={{
             label: "Your code",
@@ -184,20 +217,68 @@ function FindingCard({ finding, decision, onDecide }: { finding: Finding; decisi
             Open the source <ExternalLink aria-hidden="true" />
           </a>
         )}
-        {dismissed ? (
+        {settled ? (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDecide(null)}>Reopen</button>
         ) : (
-          <span className="ps-dismiss">
-            <label className="visually-hidden" htmlFor={`reason-${finding.id}`}>Dismiss reason</label>
-            <select id={`reason-${finding.id}`} className="select" value={reason} onChange={(event) => setReason(event.target.value)}>
-              {DISMISS_REASONS.map((item) => <option key={item}>{item}</option>)}
-            </select>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDecide({ status: "dismissed", reason, at: new Date().toISOString() })}>
+          <>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => record("replace")}>
+              Replace with a library
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => record("rewrite")}>
+              Rewrite this myself
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              aria-expanded={openAction === "accept"}
+              onClick={() => setOpenAction(openAction === "accept" ? null : "accept")}
+            >
+              Accept and document
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              aria-expanded={openAction === "dismiss"}
+              onClick={() => setOpenAction(openAction === "dismiss" ? null : "dismiss")}
+            >
               Dismiss
             </button>
-          </span>
+          </>
         )}
       </div>
+
+      {!settled && openAction === "dismiss" && (
+        <div className="ps-decide">
+          <label className="label" htmlFor={`reason-${finding.id}`}>Why are you dismissing this?</label>
+          <select id={`reason-${finding.id}`} className="select" value={reason} onChange={(event) => setReason(event.target.value)}>
+            {DISMISS_REASONS.map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => record("dismissed", reason)}>
+            Dismiss this finding
+          </button>
+        </div>
+      )}
+
+      {!settled && openAction === "accept" && (
+        <div className="ps-decide">
+          <label className="label" htmlFor={`note-${finding.id}`}>Note for your records — what did you decide, and why?</label>
+          <input
+            id={`note-${finding.id}`}
+            className="input"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Kept it; added the MIT notice to our licenses page"
+          />
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={note.trim().length === 0}
+            onClick={() => record("accepted", note.trim())}
+          >
+            Record this decision
+          </button>
+        </div>
+      )}
     </li>
   );
 }
@@ -361,7 +442,9 @@ export function PublicScanPage() {
   const matches = result?.findings.filter((finding) => finding.classification !== "insufficient_evidence" && finding.publicSource !== null) ?? [];
   const strong = matches.filter((finding) => finding.classification === "strong_match");
   const possible = matches.filter((finding) => finding.classification !== "strong_match");
-  const openCount = strong.filter((finding) => decisions[finding.id]?.status !== "dismissed").length;
+  // Open means "still needs a decision": replacing, rewriting, accepting and
+  // dismissing all settle it, opening the source only marks it as being read.
+  const openCount = strong.filter((finding) => !isSettled(decisions[finding.id])).length;
   const resolved = resolvedSince(previous, result);
   const sameCommit = Boolean(previous && result && !isPrivateUpload(result) && previous.repository.commit === result.repository.commit);
   const emptyUpload = result ? uploadHasNoEligibleFiles(result) : false;
@@ -624,6 +707,28 @@ export function PublicScanPage() {
             <p className="notice notice-ok">
               <strong>Resolved since the last scan:</strong> {resolved.map((finding) => `${finding.customer.path} ↔ ${finding.publicSource?.repository}`).join(", ")}
             </p>
+          )}
+
+          {strong.length > 0 && (
+            <div className="ps-launch">
+              <h3 className="ps-launch-title">Before you launch</h3>
+              <ul className="ps-launch-list">
+                {openCount > 0 ? (
+                  <li>
+                    <strong>{openCount} strong {openCount === 1 ? "match needs" : "matches need"} a decision.</strong> For each one:
+                    open the possible source and check its license, then replace the code with a maintained library, rewrite it,
+                    dismiss it, or accept it and write down why.
+                  </li>
+                ) : (
+                  <li><strong>Every strong match has a decision recorded.</strong> Keep these notes with your launch checklist.</li>
+                )}
+                {openCount > 0 && strong.length - openCount > 0 && <li>{strong.length - openCount} already decided.</li>}
+                <li className="ps-launch-quiet">
+                  PoryGen checks indexed public sources, not all public code, and does not certify originality or give legal
+                  advice. If a license looks like it may create obligations for the way you ship, that is a question for a lawyer.
+                </li>
+              </ul>
+            </div>
           )}
 
           {strong.length > 0 && (

@@ -161,4 +161,82 @@ describe("public scan page", () => {
     expect(screen.getByText(/does not mean the project is clear/i)).toBeInTheDocument();
     expect(screen.queryByText(/No strong source match/)).not.toBeInTheDocument();
   });
+
+  it("leads with what to decide before launch and records each decision", async () => {
+    const strongFinding = {
+      id: "f1",
+      classification: "strong_match",
+      customer: { path: "src/auth.ts", lines: { start: 10, end: 20 }, excerpt: "const a = 1;" },
+      publicSource: {
+        repository: "vendor/lib",
+        commit: "abcdef1234567890",
+        path: "src/index.js",
+        url: "https://github.com/vendor/lib/blob/abcdef1/src/index.js",
+        lines: { start: 5, end: 15 },
+        excerpt: "const a = 1;",
+        license: "AGPL-3.0",
+        licenseUrl: "https://github.com/vendor/lib/blob/abcdef1/LICENSE",
+      },
+      metrics: { customerCoverage: 0.9, sourceCoverage: 0.8, matchedTokens: 60, contiguousTokens: 45 },
+      explanation: "Strong similarity evidence.",
+    };
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        repository: { name: "acme/app", url: "https://github.com/acme/app", commit: "abcdef1234567890", commitUrl: "https://github.com/acme/app/commit/abcdef1234567890", defaultBranch: "main" },
+        coverage: { claim: "This lab searches a fixed corpus." },
+        scan: { elapsedMs: 900, fetchedFiles: 3, fetchedBytes: 400, partial: false, checkedFiles: ["src/auth.ts"], supportedFilesInTree: ["src/auth.ts"], treeComplete: true, skippedCount: 0, incompleteSupportedFiles: 0, incompleteReasons: {} },
+        summary: { strong: 1, possible: 0, insufficient: 0, total: 1 },
+        findings: [strongFinding],
+        disclaimer: "Similarity is evidence.",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderScan("/scan?repo=https://github.com/acme/app");
+
+    await screen.findByText("Before you launch");
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("1 strong source match to review");
+    // The license consequence is stated as a possibility, not a conclusion.
+    expect(screen.getByText(/may be required to release your own source/)).toBeInTheDocument();
+
+    // Every action in the brief is offered, and choosing one settles the finding.
+    for (const label of ["Replace with a library", "Rewrite this myself", "Accept and document", "Dismiss"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Replace with a library" }));
+    await waitFor(() => expect(screen.getByText(/Planned: replace with a library/)).toBeInTheDocument());
+    expect(screen.getByText("Every strong match has a decision recorded.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reopen" })).toBeInTheDocument();
+  });
+
+  it("requires a note before a risk can be accepted", async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        repository: { name: "acme/app", url: "https://github.com/acme/app", commit: "abcdef1234567890", commitUrl: "https://github.com/acme/app/commit/abcdef1234567890", defaultBranch: "main" },
+        coverage: { claim: "This lab searches a fixed corpus." },
+        scan: { elapsedMs: 900, fetchedFiles: 3, fetchedBytes: 400, partial: false, checkedFiles: ["src/auth.ts"], supportedFilesInTree: ["src/auth.ts"], treeComplete: true, skippedCount: 0, incompleteSupportedFiles: 0, incompleteReasons: {} },
+        summary: { strong: 1, possible: 0, insufficient: 0, total: 1 },
+        findings: [
+          {
+            id: "f1",
+            classification: "strong_match",
+            customer: { path: "src/auth.ts", lines: { start: 1, end: 5 }, excerpt: "x" },
+            publicSource: { repository: "vendor/lib", commit: "abcdef1234567890", path: "i.js", url: "https://github.com/vendor/lib", lines: { start: 1, end: 5 }, excerpt: "x", license: "MIT" },
+            explanation: "Strong similarity evidence.",
+          },
+        ],
+        disclaimer: "Similarity is evidence.",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderScan("/scan?repo=https://github.com/acme/app");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Accept and document" }));
+    const submit = screen.getByRole("button", { name: "Record this decision" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Note for your records/), { target: { value: "Added the MIT notice" } });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(screen.getByText(/Accepted and documented: Added the MIT notice/)).toBeInTheDocument());
+  });
+
 });

@@ -26,3 +26,17 @@ Public `/scan` ZIP and folder upload, consulted 2026-09-22. No matcher, corpus, 
 | https://developer.mozilla.org/en-US/docs/Web/API/File/webkitRelativePath | MDN / `File.webkitRelativePath` | Submitted folder paths are `webkitRelativePath` (the selected folder name is the first segment). Exclusions must match that path; ZIP roots are not stripped either. | `src/features/publicScan/scanRequest.ts` |
 | https://developer.mozilla.org/en-US/docs/Web/API/Window/btoa | MDN / `btoa()` | Canonical ZIP `archiveBase64` is standard base64 with `=` padding and no data-URL prefix. `btoa` rejects code points above 255, so bytes are encoded directly instead of being passed through a Unicode string. | `src/features/publicScan/scanRequest.ts` |
 | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array/toBase64 | MDN / `Uint8Array.prototype.toBase64()` | Where the method exists, call it with `{ alphabet: "base64", omitPadding: false }` so the payload matches Node’s canonical base64. Otherwise use the local encoder, which is tested against `Buffer.toString("base64")`. | `src/features/publicScan/scanRequest.ts` |
+
+## Pre-launch report actions
+
+Action-oriented report layered on the ZIP/folder scan UI, consulted 2026-09-22.
+No matcher, corpus, intake or API changes.
+
+| URL | Owner / title | Decision informed | Affected files |
+| --- | --- | --- | --- |
+| https://spdx.org/licenses/ | Linux Foundation / SPDX License List | License consequences are keyed to SPDX identifiers, grouped permissive / weak copyleft / strong copyleft, with `-or-later` and `+` suffixes normalized so `GPL-3.0-or-later` is not misread as unknown. An unrecognized or missing identifier is UNKNOWN and never treated as permissive. | `src/features/publicScan/licenseGuidance.ts` |
+| https://www.gnu.org/licenses/agpl-3.0.html | Free Software Foundation / GNU AGPL v3 | AGPL's §13 network clause is why hosted SaaS is called out separately from distribution in the strong-copyleft wording: for a founder about to launch a web product, "you never ship binaries" is not the end of the question. | `src/features/publicScan/licenseGuidance.ts` |
+
+All wording stays conditional ("may require", "may create obligations"). PoryGen
+does not certify originality, decide authorship, or give legal advice, and the
+report says so next to the findings.
