@@ -110,7 +110,7 @@ export function TermsPage() {
           <p>
             As between you and PoryGen, you retain your rights in code and other content you submit or direct PoryGen to
             process. You grant PoryGen a limited, non-exclusive license to access, copy, transform, and analyze that content
-            only as reasonably necessary to provide, secure, troubleshoot, and improve the service.
+            only as reasonably necessary to provide, secure, and troubleshoot the service.
           </p>
           <p>
             For the current anonymous public-repository scanner, source code is fetched and analyzed transiently by PoryGen's
