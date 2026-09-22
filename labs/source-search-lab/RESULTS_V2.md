@@ -18,14 +18,31 @@ Measured result:
 - skipped: 1
 - measured suite duration: about 206 ms
 
-The one skipped case is the live-network GitHub fixture. It is intentionally separated so the ordinary suite remains reproducible without internet access.
+The one locally skipped case is the live-network GitHub fixture. It is separated so the ordinary suite remains reproducible without internet access.
 
-## Cases covered locally
+## Networked validation
 
-Passed validations include:
+GitHub Actions run `35670077761` completed successfully on commit `053286584bb3ccd6ef1e2666db2fb3c73cc350b9`.
+
+Both validation steps passed:
+
+- **Unit and integration tests**
+- **Live public GitHub fixture**
+
+The live fixture scanned:
+
+```text
+https://github.com/sindresorhus/yocto-queue
+```
+
+and verified that the current public repository can be fetched from GitHub and its `index.js` produces a strong match against the pinned public reference entry.
+
+## Cases covered
+
+Validated behavior includes:
 
 1. strict public GitHub URL parsing;
-2. commit/tree/blob repository retrieval using a deterministic mock provider;
+2. commit/tree/blob repository retrieval;
 3. explicit partial-scan behavior when file limits are reached;
 4. committed public reference-index metadata;
 5. identifier-preserving vs identifier-normalized tokens;
@@ -41,36 +58,14 @@ Passed validations include:
 15. POST-only API;
 16. `Cache-Control: no-store`;
 17. one request performs repository fetch → retrieval → verification → result;
-18. unrelated repository input can abstain.
+18. unrelated repository input can abstain;
+19. a real public GitHub repository can complete the full fetch-and-match path.
 
 The GitHub-provider test also verifies its fetch destinations are `api.github.com` and do not contain Google, Bing, or Brave search-provider hosts.
 
-## Live public fixture
-
-Fixture:
-
-```text
-https://github.com/sindresorhus/yocto-queue
-```
-
-Command:
-
-```bash
-npm run test:public
-```
-
-Expected assertion:
-
-- resolve the repository's current commit;
-- fetch its public source through the GitHub API;
-- include `index.js`;
-- find a **strong match** against the pinned `yocto-queue/index.js` document in the prebuilt reference index.
-
-This test is also included in the path-scoped `.github/workflows/source-search-lab-v2.yml` workflow so it can run in a networked GitHub-hosted environment without deploying the lab.
-
 ## Interpretation
 
-The V2 validation demonstrates the mechanics of:
+V2 demonstrates the mechanics of:
 
 ```
 click Scan
@@ -83,7 +78,7 @@ click Scan
 
 It does **not** validate web-scale recall or the experimental thresholds.
 
-The current corpus is only six files from three repositories. Accuracy numbers derived from such a corpus would be misleading.
+The current corpus is only six files from three repositories. Accuracy percentages derived from such a corpus would be misleading.
 
 ## Remaining validation gates
 
