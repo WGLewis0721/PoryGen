@@ -7,7 +7,6 @@ import { EvidenceList } from "../../components/EvidenceList";
 import { HistoryList, StageRail, type HistoryEntry } from "../../components/ResolutionTimeline";
 import { StatusTag, ToneTag } from "../../components/Tags";
 import { useDocumentTitle } from "../../components/useDocumentTitle";
-import { useAuth } from "../auth/AuthContext";
 import { describeFinding } from "../../lib/findingVocabulary";
 import { HISTORY_LABEL, stagesFromHistory } from "../../lib/resolution";
 import type { ResolutionAction, TrackedStatus } from "../../lib/dbTypes";
@@ -99,7 +98,6 @@ function Counts({ counts, label }: { counts: ReturnType<typeof repoCounts>; labe
 
 export function DemoPage() {
   useDocumentTitle("Live demo — PoryGen");
-  const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("intro");
   const [before, setBefore] = useState<PipelineResult | null>(null);
   const [after, setAfter] = useState<PipelineResult | null>(null);
@@ -592,7 +590,7 @@ export function DemoPage() {
               Want PoryGen watching your real repo?
             </h2>
             <div className="cta-row">
-              <Link to={user ? "/repositories/new" : "/sign-up"} className="btn btn-primary">
+              <Link to="/scan" className="btn btn-primary">
                 Scan your repo
               </Link>
               <button type="button" className="btn btn-ghost" onClick={restart}>

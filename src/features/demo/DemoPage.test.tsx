@@ -63,7 +63,7 @@ describe("public sample demo", () => {
     expect(screen.getByText("6%")).toBeInTheDocument();
     expect(screen.getByText("Clean rescan — resolved")).toBeInTheDocument();
     expect(screen.getByText("Fix recorded")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /scan your repo/i })).toHaveAttribute("href", "/sign-up");
+    expect(screen.getByRole("link", { name: /scan your repo/i })).toHaveAttribute("href", "/scan");
   });
 
   it("refuses to accept risk without a reason and keeps the decision in history", async () => {

@@ -20,6 +20,7 @@ const FindingDetailPage = lazy(() => import("./features/findings/FindingDetailPa
 const RepositoriesPage = lazy(() => import("./features/repositories/RepositoriesPage").then((m) => ({ default: m.RepositoriesPage })));
 const NewScanPage = lazy(() => import("./features/repositories/NewScanPage").then((m) => ({ default: m.NewScanPage })));
 const ScanPage = lazy(() => import("./features/scanner/ScanPage").then((m) => ({ default: m.ScanPage })));
+const PublicScanPage = lazy(() => import("./features/publicScan/PublicScanPage").then((m) => ({ default: m.PublicScanPage })));
 const HistoryPage = lazy(() => import("./features/history/HistoryPage").then((m) => ({ default: m.HistoryPage })));
 const EvidenceBundlePage = lazy(() => import("./features/reports/EvidenceBundlePage").then((m) => ({ default: m.EvidenceBundlePage })));
 const BillingStatusPage = lazy(() => import("./features/billing/BillingStatusPage").then((m) => ({ default: m.BillingStatusPage })));
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/how-it-works" element={<Lazy><HowItWorksPage /></Lazy>} />
             <Route path="/demo" element={<Lazy><DemoPage /></Lazy>} />
+            <Route path="/scan" element={<Lazy><PublicScanPage /></Lazy>} />
             <Route path="/pricing" element={<Lazy><PricingPage /></Lazy>} />
             <Route path="/security" element={<Lazy><SecurityPage /></Lazy>} />
             <Route path="/docs" element={<Lazy><DocsPage /></Lazy>} />

@@ -7,7 +7,6 @@ import { EvidenceList } from "../../components/EvidenceList";
 import { ToneTag } from "../../components/Tags";
 import { ScrawlArrow, ScrawlUnderline } from "../../components/Scrawl";
 import { useReveal } from "../../components/useReveal";
-import { useAuth } from "../auth/AuthContext";
 import { PLANS, DILIGENCE_PACK, AVAILABILITY_LABEL } from "../../config/plans";
 import { SAMPLE_CORPUS, RATE_LIMIT_BEFORE, SAMPLE_REPOSITORY } from "../demo/sampleRepo";
 import { SAMPLE_MATCH_SNAPSHOT as SNAP } from "../demo/sampleSnapshot";
@@ -37,7 +36,6 @@ const theirCode = sliceLines(source.source, 1, 10, 32);
 const pct = (value: number) => `${Math.round(value * 100)}%`;
 
 function Hero() {
-  const { user } = useAuth();
   return (
     <section className="hero" aria-labelledby="hero-title">
       <Picture
@@ -61,14 +59,14 @@ function Hero() {
           before it ships.
         </p>
         <div className="hero-actions">
-          <Link to={user ? "/repositories/new" : "/sign-up"} className="btn btn-primary">
+          <Link to="/scan" className="btn btn-primary">
             Scan a repo
           </Link>
           <Link to="/demo" className="btn btn-secondary">
             See live demo
           </Link>
         </div>
-        <p className="hero-note">Free for one repository. No credit card.</p>
+        <p className="hero-note">Public GitHub repos. No account needed.</p>
       </div>
     </section>
   );
@@ -350,7 +348,6 @@ function PricingSummary() {
 }
 
 function FinalCta() {
-  const { user } = useAuth();
   return (
     <section className="final" aria-labelledby="final-title">
       <Picture
@@ -366,7 +363,7 @@ function FinalCta() {
           Want PoryGen watching your real repo?
         </h2>
         <div className="hero-actions">
-          <Link to={user ? "/repositories/new" : "/sign-up"} className="btn btn-primary">
+          <Link to="/scan" className="btn btn-primary">
             Scan your repo
           </Link>
           <Link to="/demo" className="btn btn-secondary">

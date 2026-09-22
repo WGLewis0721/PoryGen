@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchPublicGitHubRepository } from "./lib/github-source.mjs";
-import { scanSourceFiles } from "./lib/search.mjs";
+import { scanRepository } from "./lib/scan-service.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "public");
@@ -58,56 +58,8 @@ async function handleScan(req, res, { referenceIndex, repositoryFetcher }) {
   }
 
   const repositoryUrl = typeof body.repositoryUrl === "string" ? body.repositoryUrl.trim() : "";
-  if (!repositoryUrl) return sendJson(res, 400, { error: "Enter a public GitHub repository URL." });
-
-  const started = Date.now();
-  try {
-    const fetched = await repositoryFetcher(repositoryUrl);
-    const compared = scanSourceFiles(fetched.files, referenceIndex, referenceIndex.settings);
-
-    const strong = compared.findings.filter((f) => f.classification === "strong_match").length;
-    const possible = compared.findings.filter((f) => f.classification === "possible_common_pattern").length;
-    const insufficient = compared.findings.filter((f) => f.classification === "insufficient_evidence").length;
-    const comparisonErrorFiles = new Set(compared.errors.map((error) => error.file));
-    const successfullyCheckedFiles = fetched.files
-      .map((file) => file.path)
-      .filter((path) => !comparisonErrorFiles.has(path));
-
-    return sendJson(res, 200, {
-      repository: {
-        name: fetched.repository,
-        url: fetched.repositoryUrl,
-        commit: fetched.commit,
-        commitUrl: fetched.commitUrl,
-        defaultBranch: fetched.defaultBranch,
-      },
-      coverage: referenceIndex.coverage,
-      scan: {
-        elapsedMs: Date.now() - started,
-        fetchedFiles: fetched.stats.fetchedFiles,
-        fetchedBytes: fetched.stats.fetchedBytes,
-        partial: fetched.partial || compared.errors.length > 0,
-        checkedFiles: successfullyCheckedFiles,
-        supportedFilesInTree: fetched.stats.supportedFilesInTree ?? fetched.files.map((file) => file.path),
-        treeComplete: fetched.stats.treeComplete ?? fetched.stats.treeTruncated !== true,
-        incompleteSupportedFiles: fetched.stats.incompleteSupportedFiles ?? 0,
-        incompleteReasons: fetched.stats.incompleteReasons ?? {},
-        treeTruncated: fetched.stats.treeTruncated,
-        stoppedForLimit: fetched.stats.stoppedForLimit,
-        skippedCount: fetched.stats.skippedCount,
-        skipped: fetched.skipped,
-        providerErrors: compared.errors,
-      },
-      summary: { strong, possible, insufficient, total: compared.findings.length },
-      findings: compared.findings,
-      disclaimer:
-        "Similarity is evidence to review, not proof of copying or AI authorship. No match means only that nothing sufficiently strong was found in this lab's indexed sources.",
-    });
-  } catch (error) {
-    return sendJson(res, 502, {
-      error: error instanceof Error ? error.message : "Scan failed.",
-    });
-  }
+  const { status, payload } = await scanRepository(repositoryUrl, { referenceIndex, repositoryFetcher });
+  return sendJson(res, status, payload);
 }
 
 function contentType(filePath) {

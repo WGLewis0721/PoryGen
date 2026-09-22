@@ -7,6 +7,7 @@ function response(data, status = 200) {
     ok: status >= 200 && status < 300,
     status,
     async json() { return data; },
+    async text() { return data; },
   };
 }
 
@@ -39,11 +40,8 @@ test("repository fetch resolves a commit and fetches supported blobs without exe
         ],
       });
     }
-    if (String(url).endsWith("/git/blobs/blob-a")) {
-      return response({
-        encoding: "base64",
-        content: Buffer.from("export function hello() { return 1; }").toString("base64"),
-      });
+    if (String(url) === "https://raw.githubusercontent.com/example/project/abc123/src/a.js") {
+      return response("export function hello() { return 1; }");
     }
     throw new Error(`Unexpected URL: ${url}`);
   };
@@ -53,8 +51,8 @@ test("repository fetch resolves a commit and fetches supported blobs without exe
   assert.equal(fetched.files.length, 1);
   assert.equal(fetched.files[0].path, "src/a.js");
   assert.equal(fetched.files[0].language, "javascript");
-  assert.equal(calls.some((url) => url.includes("blob-readme")), false);
-  assert.equal(calls.some((url) => url.includes("blob-dist")), false);
+  assert.equal(calls.some((url) => url.includes("README.md")), false);
+  assert.equal(calls.some((url) => url.includes("dist/")), false);
 });
 
 test("file limits make the scan partial instead of silently ignoring the limit", async () => {
@@ -70,8 +68,8 @@ test("file limits make the scan partial instead of silently ignoring the limit",
         ],
       });
     }
-    const name = String(url).endsWith("/a") ? "a" : "b";
-    return response({ encoding: "base64", content: Buffer.from(`const ${name} = 1;`).toString("base64") });
+    const name = String(url).endsWith("/a.js") ? "a" : "b";
+    return response(`const ${name} = 1;`);
   };
 
   const fetched = await fetchPublicGitHubRepository("https://github.com/example/project", {
@@ -137,7 +135,7 @@ test("provider failure remains incomplete after skipped-detail list is full", as
         ],
       });
     }
-    if (String(url).endsWith("/git/blobs/fails")) return response({}, 503);
+    if (String(url).endsWith("/src/fails.js")) return response("", 503);
     throw new Error(`Unexpected URL: ${url}`);
   };
 
