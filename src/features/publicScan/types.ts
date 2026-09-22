@@ -18,10 +18,30 @@ export interface Finding {
   explanation: string;
 }
 
+export interface UploadIngestion {
+  entries: number;
+  declaredBytes: number;
+  extractedBytes: number;
+  skippedReasons: Record<string, number>;
+  selectionComplete: boolean;
+  empty: boolean;
+}
+
 export interface ScanResult {
-  repository: { name: string; url: string; commit: string; commitUrl: string; defaultBranch: string };
+  repository: {
+    name: string;
+    url: string | null;
+    commit: string;
+    commitUrl: string | null;
+    defaultBranch: string | null;
+  };
+  /** Present once the ZIP/folder contract is live. Older GitHub responses omit it. */
+  source?: { type: "github" | "zip" | "files"; transient?: boolean };
   coverage: { claim: string };
   scan: {
+    exclusions?: string[];
+    excludedFiles?: number;
+    ingestion?: UploadIngestion | null;
     elapsedMs: number;
     fetchedFiles: number;
     fetchedBytes: number;
@@ -32,8 +52,15 @@ export interface ScanResult {
     skippedCount: number;
     incompleteSupportedFiles: number;
     incompleteReasons: Record<string, number>;
+    skipped?: { path: string; reason: string }[];
   };
   summary: { strong: number; possible: number; insufficient: number; total: number };
   findings: Finding[];
   disclaimer: string;
+}
+
+export interface ScanErrorBody {
+  error?: string;
+  code?: string;
+  retryable?: boolean;
 }
