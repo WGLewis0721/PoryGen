@@ -2,121 +2,165 @@
 
 **Move fast. Keep it yours.**
 
-PoryGen checks the code AI agents put into your product so you can catch suspicious source
-similarity and license risk before you ship someone else's code as your own.
+PoryGen checks public GitHub repositories for suspicious similarity to indexed public source code so a developer can inspect the source, understand the license context, and decide what to do before shipping.
 
-> If AI coding becomes normal, checking what the AI gave you should become normal too.
+> If AI-assisted coding becomes normal, checking what the AI gave you should become normal too.
 
-🔗 **Live**: [porygen.vercel.app](https://porygen.vercel.app) ·
-**Sample demo (no account)**: `/demo`
+**Live:** https://porygen.vercel.app  
+**Real public-repo scanner:** https://porygen.vercel.app/scan  
+**Guided sample demo:** https://porygen.vercel.app/demo
 
-## The loop
+## MVP status
+
+PoryGen is now a working public MVP.
+
+A visitor can:
+
+1. paste a public GitHub repository URL;
+2. click **Scan** with no account;
+3. have PoryGen fetch the latest commit;
+4. compare supported JavaScript, TypeScript, and Python files against the current reference index;
+5. see strong matches, possible/common patterns, or a clean abstention;
+6. inspect matched line ranges, source excerpts, commit-pinned GitHub links, and license metadata;
+7. review or dismiss a finding;
+8. push a change and rescan to see whether the finding is still present.
+
+The current production path is **real repo → Scan → real result → evidence → action**.
+
+## What happens during a scan
 
 ```
-AI agent adds code
-  → PoryGen checks the new or changed code
-  → each file is clear, a common pattern, review suggested, or a strong source match
-  → you see the possible source, the evidence, and the license that comes with it
-  → you review, replace or rewrite, dismiss a false positive, or accept the risk with a reason
-  → PoryGen rescans
-  → the finding resolves on a clean rescan (or stays open)
-  → every step is kept as resolution history
+public GitHub URL
+  → resolve latest default-branch commit
+  → read repository tree
+  → fetch bounded JS / TS / Python source
+  → normalize + fingerprint
+  → retrieve candidate public sources
+  → verify source-specific similarity
+  → classify strong / possible-common / insufficient
+  → show exact source, lines, license and evidence
 ```
 
-The everyday value is another set of eyes on what your AI gave you. The long-term side effect
-is a record of what was checked, flagged, fixed, and confirmed — useful later, never the pitch.
+The production endpoint is `api/scan.mjs`, a Vercel serverless function using the Source Search V2 engine under `labs/source-search-lab/lib/`.
 
-PoryGen is vendor-independent (it checks the repository, not the agent), Git-centered, and
-built for remediation rather than a one-off report. It did **not** invent fingerprinting, SCA,
-SBOMs, or attribution; its contribution is the join — see [how it fits](docs/ARCHITECTURE.md#where-porygen-fits).
+### Current scan limits
 
-## What's real, what's sample data, what isn't built
+- public GitHub repositories only;
+- JavaScript, TypeScript, and Python;
+- up to 40 supported files;
+- up to 100 KB per file;
+- up to 750 KB of source per scan;
+- bounded request-time execution;
+- build/vendor/generated directories are skipped.
 
-| Surface | Status |
-|---|---|
-| Marketing site (`/`, `/how-it-works`, `/pricing`, `/security`, `/docs`) | Real |
-| Public demo (`/demo`) | **Sample data, real engine.** A fictional repository and fictional "public source" run through the production scan pipeline in the browser. Labelled *Sample interactive demo* on screen. |
-| Auth (sign up, sign in, session, sign out) | Real — Supabase Auth |
-| Scanning public GitHub repositories | Real — `scan-repository` Edge Function (40 files / 200 KB each / 2 MB per scan) |
-| Scan pipeline (normalize → Winnowing → similarity providers → license context → findings) | Real — `packages/provenance-core/src/scanner/pipeline.ts`, shared by the Edge Function, the demo, the seed script, and tests |
-| Similarity coverage | **Limited and stated.** One provider today: PoryGen's bundled reference corpus (4 original reference implementations). Not GitHub, not package registries, not the internet. Every finding names its provider and coverage. |
-| License context | Real — npm registry / PyPI lookups, SPDX expressions, license-file detection |
-| Side-by-side match view with matched line ranges | Real (scans from pipeline 2026.09 onward store the matched excerpt; older findings show the reference source only) |
-| Resolution workflow (review, record a fix, dismiss, accept risk, reopen) | Real — `record_finding_action()` in Postgres, owner-checked, reasons required. **Requires migration `20260921000500`** |
-| Automatic resolution on rescan | Real — `sync_tracked_findings()`, service role only, resolves only what a scan provably re-checked |
-| Resolution history | Real, append-only (updates are blocked by trigger) |
-| Evidence export (JSON + print summary) | Real, now includes resolution history and coverage |
-| Editor attribution (VS Code extension, hash-chained ledger) | Real, optional — repositioned under History |
-| Continuous monitoring (every push / PR), private repos, GitHub checks, team access, policies | **Not built** — marked *In development* wherever they appear |
-| Paid plans (Pro $49/mo, Team $199/mo) | Checkout code is real and **fails closed** until `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_TEAM_MONTHLY` are configured |
-| Plan limits | Displayed, **not enforced** (early access) |
-| Diligence Pack, Enterprise / private deployment | On request / roadmap. No sales contact is configured yet (`VITE_SALES_EMAIL`, TODO: client to supply) |
-| APEX dogfood $19 one-time SKU | Real, **operator-only** (`/billing/diagnostics`). Never shown as customer pricing and never grants a plan. See [docs/APEX_DOGFOOD.md](docs/APEX_DOGFOOD.md) |
-| Sigstore signing | Not implemented — attestations are labelled "local hash-chain attestation" |
+When a scan cannot cover every supported file, the UI reports a **partial scan** rather than silently implying complete coverage.
+
+## Current source coverage
+
+The matching engine is real; the source corpus is intentionally small.
+
+The bundled V2 reference index currently contains **6 pinned files from 3 public repositories**:
+
+- `sindresorhus/yocto-queue`
+- `date-fns/date-fns`
+- `psf/requests`
+
+Every source is pinned to a commit and documented with its license.
+
+A result of **No strong source match** means only that no sufficiently specific match was found in the sources PoryGen currently indexes. It does **not** mean the repository is original or free of license risk.
+
+## Reporting philosophy
+
+Retrieval is broad; reporting is conservative.
+
+Normalized structural similarity is useful for finding candidates, but structure alone cannot create a strong attribution. A **Strong match** also requires source-specific evidence such as exact identifier/literal overlap or rare preserving fingerprints.
+
+Possible/common patterns are separated from strong findings so ordinary implementation patterns do not read like accusations.
+
+PoryGen may return no source finding at all. Abstention is a successful scan outcome.
+
+## Actions and persistence
+
+The public MVP currently supports:
+
+- **Review source** — opens the exact commit-pinned source and matched lines;
+- **Dismiss** — records a reason in browser local storage;
+- **Reopen** — restores a dismissed finding;
+- **Rescan latest commit** — fetches the current repository state again;
+- **Safe resolution** — a disappeared finding is only called resolved when its file was actually rechecked or a complete repository tree proves the file was deleted.
+
+Public-scan decisions are currently browser-local. Durable account/workspace history is a later product phase.
+
+## Sample demo
+
+`/demo` remains a guided fictional walkthrough. It is useful for learning the workflow, but it is not the same thing as the live scanner.
+
+The real product path is `/scan`.
+
+## What is not built yet
+
+- private repository scanning;
+- GitHub App installation and repository picker;
+- automatic push / pull-request monitoring;
+- GitHub Check Runs;
+- durable cloud persistence for public-scan review/dismiss decisions;
+- team/workspace controls;
+- broad internet-scale source coverage;
+- async scanning for large repositories;
+- production customer billing/entitlement enforcement;
+- GitHub Marketplace distribution.
+
+The repository still contains the earlier Supabase-authenticated application and billing groundwork. The public MVP no longer requires that stack to perform a real scan.
 
 ## What PoryGen does not claim
 
-- **Not exhaustive.** A clear result means nothing matched the sources that scan compared against.
+- **Not exhaustive.** Coverage is limited to the indexed sources.
 - **Not proof of copying.** Similarity is evidence for a human to review.
-- **Not legal advice.** License context describes what a license family usually requires.
-- **Not a certification.** The resolution history is a record, not a guarantee of originality.
-- **Not an AI detector.** Editor attribution records edit shape (size, timing), never content, as a heuristic.
+- **Not proof of AI authorship.**
+- **Not legal advice.**
+- **Not a certification of originality.**
 
-## Local setup
+## Local development
 
 ```bash
 npm install
-cp .env.example .env.local   # VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY
 npm run dev
 ```
 
-Without Supabase credentials the marketing site and the `/demo` walkthrough work fully; sign-in
-and the app show a clear "not configured" state.
+For the real public scan API during local development, run the isolated scan server in another terminal:
 
 ```bash
-npm test         # Vitest app/core suites, then the isolated lab's node:test suites
-npm run build    # tsc -b && vite build
-npm run lint     # oxlint
+npm --prefix labs/source-search-lab start
 ```
 
-The database tests run every migration in `supabase/migrations/` against PGlite (real Postgres
-compiled to WASM) with Supabase-shaped roles and `auth.uid()`, so RLS policies and the
-resolution functions are exercised for real without touching a live project.
+Vite proxies `/api` to that server.
 
-## Environment variables
-
-See [.env.example](.env.example). `VITE_*` values are public by design (the publishable key is
-only as powerful as RLS allows). Everything else — Stripe keys and price IDs,
-`APEX_CUSTOMER_ID`, `GITHUB_TOKEN` — is an Edge Function secret set with `supabase secrets set`
-and never bundled.
-
-## Deploying this change
-
-Order matters because the frontend degrades gracefully but the new Edge Functions expect the
-new schema:
+Quality commands:
 
 ```bash
-supabase db push                                   # applies 20260921000500_resolution_history.sql
-node scripts/sync-vendored-copies.mjs              # already run; re-run after touching provenance-core
-supabase functions deploy scan-repository create-checkout stripe-webhook billing-diagnostics
-npm run seed > scripts/lattice-seed.sql            # optional: refresh the public sample (already generated)
-# apply scripts/lattice-seed.sql with service-role access
-npm run build && node scripts/deploy-worker-assets.mjs
+npm test
+npm run build
+npm run lint
 ```
 
-Until the migration is applied, the app still scans and shows findings; resolution tracking
-shows an explicit "not enabled on this deployment yet" state instead of failing.
+## Production configuration
+
+The live scanner can use a server-side `GITHUB_TOKEN` to increase GitHub API capacity. It is never sent to the browser.
+
+The public scan fetcher uses GitHub REST for repository metadata, commit, and tree resolution, then uses `raw.githubusercontent.com` for source contents so a normal scan consumes only a few GitHub API requests.
+
+The Vercel function bundles the prebuilt reference index through `vercel.json`.
 
 ## Documentation
 
-- [ROADMAP.md](ROADMAP.md) — product, commercialization, APEX validation, and execution sequence
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system shape, scan path, provider seam, async-worker evolution
-- [docs/SCANNER.md](docs/SCANNER.md) — normalization, Winnowing, providers, bands, coverage, limits
-- [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — tables and the resolution-history model
-- [docs/SECURITY.md](docs/SECURITY.md) — RLS, ingestion boundary, secrets, retention
-- [docs/PROVENANCE.md](docs/PROVENANCE.md) — history, evidence export, optional editor attribution
-- [docs/DEMO_FLOW.md](docs/DEMO_FLOW.md) — public demo and authenticated walkthrough
-- [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md) — subscriptions, webhook, fail-closed behaviour
-- [docs/APEX_DOGFOOD.md](docs/APEX_DOGFOOD.md) — the separate operator test
-- [docs/OPUS_HANDOFF.md](docs/OPUS_HANDOFF.md) — state of this pass and what's next
-- [DESIGN.md](DESIGN.md) · [VISUAL-PLAN.md](VISUAL-PLAN.md) — visual system and imagery sources
+- [ROADMAP.md](ROADMAP.md) — current product state and next execution phases
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — live MVP architecture and evolution path
+- [docs/SCANNER.md](docs/SCANNER.md) — Source Search V2 retrieval, verification, coverage and limits
+- [docs/SECURITY.md](docs/SECURITY.md) — public scan boundary, secrets and retention
+- [docs/DEMO_FLOW.md](docs/DEMO_FLOW.md) — real public scan and sample demo flows
+- [docs/LIVE_QA_2026-09-22.md](docs/LIVE_QA_2026-09-22.md) — live QA history and final MVP retest
+- [docs/OPUS_HANDOFF.md](docs/OPUS_HANDOFF.md) — current implementation handoff
+- [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — existing authenticated-app persistence model
+- [docs/PROVENANCE.md](docs/PROVENANCE.md) — earlier provenance/history capabilities
+- [docs/STRIPE_SETUP.md](docs/STRIPE_SETUP.md) — existing billing groundwork
+- [DESIGN.md](DESIGN.md) · [VISUAL-PLAN.md](VISUAL-PLAN.md) — visual system
