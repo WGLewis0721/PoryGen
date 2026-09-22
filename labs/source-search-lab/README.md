@@ -103,6 +103,21 @@ The index and customer regions each use two representations:
 
 Both are shingled and Winnowed. Candidate lists are combined, with fingerprints appearing in much of the small corpus downweighted. Each region is bounded to roughly 20 candidates before the more expensive ordered comparison.
 
+### Literal handling
+
+The two representations intentionally treat literals differently:
+
+- the **identifier-preserving** representation keeps the exact lexical spelling of string, template, and numeric literals as a token signal, so `"safe"` and `"unsafe"` are distinguishable during precise retrieval;
+- the **identifier-normalized** representation collapses all supported literals to `LIT`, so changing a string or numeric constant does not destroy structural similarity;
+- JavaScript/TypeScript template literals are treated as one lexical literal token in this lightweight lab; interpolation expressions inside a template are not parsed separately;
+- Python single-, double-, and triple-quoted strings are treated as literal tokens. Python string-prefix semantics such as `f`, `r`, and `b` are not fully parsed by this dependency-free tokenizer.
+
+### JavaScript / TypeScript compatibility
+
+JavaScript and TypeScript are treated as one compatible retrieval family. A `.ts` or `.tsx` customer region may match an indexed JavaScript source, and a JavaScript customer region may match an indexed TypeScript source. Python remains isolated to Python candidates.
+
+Compatibility filtering happens **before** the shortlist is ranked so incompatible-language postings cannot consume the approximately 20 candidate slots.
+
 The verifier reports:
 
 - customer line range;

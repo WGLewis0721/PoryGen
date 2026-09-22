@@ -73,10 +73,14 @@ Internal reference:
 
 Existing PoryGen behavior collapses developer-chosen identifiers and literals while preserving keywords/punctuation so variable renaming and formatting changes have less effect.
 
+V2 deliberately keeps **two** signals. The preserving representation keeps identifier names and literal spelling; the normalized representation collapses identifiers to `ID` and supported literals to `LIT`. JavaScript private identifiers such as `#head` are tokenized as identifiers rather than Python-style comments. Python single-, double-, and triple-quoted strings are treated as literals.
+
 V2 mapping:
 
-- `lib/search.mjs:58-99` — dependency-free tokenization with identifier-preserving or identifier-normalized output.
-- `lib/search.mjs:156-197` — build both representations into the public reference index.
+- `lib/search.mjs` tokenizer section — language-specific lexical tokenization plus preserving/normalized output.
+- `lib/search.mjs` reference-index builder — build both representations into the public reference index.
+
+JavaScript and TypeScript are treated as compatible candidate languages. Python remains Python-only.
 
 Classification: **direct internal design precedent**.
 
@@ -94,7 +98,7 @@ Christopher D. Manning, Prabhakar Raghavan, Hinrich Schütze, *Introduction to I
 V2 mapping:
 
 - `lib/search.mjs:156-197` — prebuild fingerprint postings.
-- `lib/search.mjs:245-293` — query postings from both representations, combine candidate lists, calculate an IDF-like weight, and downweight fingerprints common across much of the corpus.
+- `lib/search.mjs` candidate retrieval — query postings from both representations, filter to compatible languages, combine candidate lists, calculate an IDF-like weight, and downweight fingerprints common across much of the corpus. Each query fingerprint contributes at most once per candidate document; repeated occurrences remain only as location evidence.
 
 The exact weighting rule and 0.60 common-fingerprint cutoff are **original experimental lab heuristics**, not implementations from the text.
 

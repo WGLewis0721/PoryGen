@@ -17,8 +17,11 @@ const PY_KEYWORDS = new Set([
   "not","and","or","pass","global","nonlocal","assert","del","None","True","False","self",
 ]);
 
-const TOKEN_PATTERN =
-  /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*|\b\d+(?:\.\d+)?\b|[A-Za-z_$][A-Za-z0-9_$]*|=>|===|!==|==|!=|<=|>=|&&|\|\||\+\+|--|\+=|-=|\*=|\/=|\*\*|\.\.\.|[{}()[\];,.:?=<>+\-*/%&|!^~]/g;
+const JS_TOKEN_PATTERN =
+  /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[A-Za-z_$][A-Za-z0-9_$]*|\b\d+(?:\.\d+)?\b|[A-Za-z_$][A-Za-z0-9_$]*|=>|===|!==|==|!=|<=|>=|&&|\|\||\+\+|--|\+=|-=|\*=|\/=|\*\*|\.\.\.|[{}()[\];,.:?=<>+\-*/%&|!^~]/g;
+
+const PY_TOKEN_PATTERN =
+  /"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|#[^\n]*|\b\d+(?:\.\d+)?\b|[A-Za-z_][A-Za-z0-9_]*|==|!=|<=|>=|\*\*|\/\/|:=|\.\.\.|[{}()[\];,.:?=<>+\-*/%&|!^~]/g;
 
 const PUNCTUATION = new Set([
   "{","}","(",")","[","]",";",",",".",":","?","=>","=","==","===","!=","!==","<",">",
@@ -49,6 +52,13 @@ export function detectLanguage(path) {
   return "unknown";
 }
 
+export function languagesCompatible(a, b) {
+  if (a === b) return true;
+  const aJsFamily = a === "javascript" || a === "typescript";
+  const bJsFamily = b === "javascript" || b === "typescript";
+  return aJsFamily && bJsFamily;
+}
+
 function keywordSet(language) {
   if (language === "typescript") return TS_KEYWORDS;
   if (language === "python") return PY_KEYWORDS;
@@ -57,28 +67,38 @@ function keywordSet(language) {
 
 export function tokenizeSource(source, language, { normalizeIdentifiers = false } = {}) {
   const keywords = keywordSet(language);
+  const pattern = language === "python" ? PY_TOKEN_PATTERN : JS_TOKEN_PATTERN;
   const tokens = [];
   let line = 1;
   let lastIndex = 0;
-  TOKEN_PATTERN.lastIndex = 0;
+  pattern.lastIndex = 0;
 
-  for (let match; (match = TOKEN_PATTERN.exec(source)); ) {
+  for (let match; (match = pattern.exec(source)); ) {
     for (let i = lastIndex; i < match.index; i++) {
       if (source.charCodeAt(i) === 10) line += 1;
     }
-    lastIndex = TOKEN_PATTERN.lastIndex;
+    lastIndex = pattern.lastIndex;
 
     const raw = match[0];
     const startLine = line;
     const newlines = raw.match(/\n/g);
     if (newlines) line += newlines.length;
 
-    const isJsComment = raw.startsWith("//") || raw.startsWith("/*");
+    const isJsComment = language !== "python" && (raw.startsWith("//") || raw.startsWith("/*"));
     const isPyComment = language === "python" && raw.startsWith("#");
     if (isJsComment || isPyComment) continue;
 
-    if (raw[0] === '"' || raw[0] === "'" || raw[0] === "`" || /^\d/.test(raw)) {
-      tokens.push({ kind: "LIT", line: startLine });
+    const isLiteral =
+      raw[0] === '"' ||
+      raw[0] === "'" ||
+      raw[0] === "`" ||
+      /^\d/.test(raw);
+
+    if (isLiteral) {
+      tokens.push({
+        kind: normalizeIdentifiers ? "LIT" : `lit:${raw}`,
+        line: startLine,
+      });
       continue;
     }
 
@@ -243,7 +263,12 @@ export function makeRegions(source, path, language, settings = DEFAULT_SETTINGS)
 }
 
 export function retrieveCandidates(region, index, settings = DEFAULT_SETTINGS) {
-  const totalDocs = Math.max(1, index.documents.length);
+  const compatibleDocIds = new Set(
+    index.documents
+      .filter((doc) => languagesCompatible(region.language, doc.language))
+      .map((doc) => doc.id),
+  );
+  const totalDocs = Math.max(1, compatibleDocIds.size);
   const candidates = new Map();
 
   for (const representation of ["preserving", "normalized"]) {
@@ -252,15 +277,24 @@ export function retrieveCandidates(region, index, settings = DEFAULT_SETTINGS) {
       if (seenQueryHashes.has(fp.hash)) continue;
       seenQueryHashes.add(fp.hash);
 
-      const postings = index.postings[representation][String(fp.hash)] ?? [];
-      if (postings.length === 0) continue;
+      const rawPostings = index.postings[representation][String(fp.hash)] ?? [];
+      if (rawPostings.length === 0) continue;
 
-      const df = uniqueDocumentFrequency(postings);
+      const postingsByDoc = new Map();
+      for (const [docId, position] of rawPostings) {
+        if (!compatibleDocIds.has(docId)) continue;
+        let positions = postingsByDoc.get(docId);
+        if (!positions) postingsByDoc.set(docId, (positions = []));
+        positions.push(position);
+      }
+      if (postingsByDoc.size === 0) continue;
+
+      const df = postingsByDoc.size;
       const commonRatio = df / totalDocs;
       const idf = Math.log((totalDocs + 1) / (df + 1)) + 1;
       const weight = commonRatio >= settings.commonFingerprintRatio ? idf * 0.20 : idf;
 
-      for (const [docId, position] of postings) {
+      for (const [docId, positions] of postingsByDoc) {
         let candidate = candidates.get(docId);
         if (!candidate) {
           candidate = {
@@ -274,11 +308,14 @@ export function retrieveCandidates(region, index, settings = DEFAULT_SETTINGS) {
           };
           candidates.set(docId, candidate);
         }
+
+        // A query fingerprint contributes at most once per candidate document.
+        // Repeated occurrences are retained only as location evidence.
         candidate.score += weight;
         candidate[`${representation}Score`] += weight;
         candidate.matchedHashes += 1;
         if (commonRatio >= settings.commonFingerprintRatio) candidate.commonHashes += 1;
-        candidate.positions[representation].push(position);
+        candidate.positions[representation].push(...positions);
       }
     }
   }
@@ -445,7 +482,7 @@ export function scanSourceFiles(files, index, settings = DEFAULT_SETTINGS) {
         const candidates = retrieveCandidates(region, index, settings);
         for (const candidate of candidates) {
           const document = documentById.get(candidate.docId);
-          if (!document || document.language !== language) continue;
+          if (!document || !languagesCompatible(language, document.language)) continue;
           const evidence = verifyCandidate(region, candidate, document, settings);
           if (evidence.classification === "insufficient_evidence") continue;
 
