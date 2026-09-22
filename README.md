@@ -74,7 +74,7 @@ Without Supabase credentials the marketing site and the `/demo` walkthrough work
 and the app show a clear "not configured" state.
 
 ```bash
-npm test         # vitest — scanner, pipeline, providers, resolution-history SQL (PGlite), seed, UI
+npm test         # Vitest app/core suites, then the isolated lab's node:test suites
 npm run build    # tsc -b && vite build
 npm run lint     # oxlint
 ```
