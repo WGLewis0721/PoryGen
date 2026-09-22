@@ -21,8 +21,8 @@ const DISMISS_REASONS = [
 const REASON_LABELS: Record<string, string> = {
   file_too_large: "over 100 KB",
   decoded_file_too_large: "over 100 KB",
-  file_limit: "beyond the 40-file limit",
-  total_byte_limit: "beyond the 750 KB limit",
+  file_limit: "beyond the 150-file limit",
+  total_byte_limit: "beyond the 2 MB limit",
   time_limit: "not reached in time",
   provider_failure: "failed to download",
 };
