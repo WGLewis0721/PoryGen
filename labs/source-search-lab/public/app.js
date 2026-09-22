@@ -1,3 +1,5 @@
+import { analyzeRescanResolution } from "./resolution.mjs";
+
 const form = document.querySelector("#scan-form");
 const repositoryInput = document.querySelector("#repository-url");
 const scanButton = document.querySelector("#scan-button");
@@ -69,19 +71,26 @@ function renderMeta(data) {
 function renderResolved(data) {
   resolvedBox.hidden = true;
   resolvedBox.innerHTML = "";
-  if (!previousScan || previousScan.repository.name !== data.repository.name) return;
-  if (previousScan.repository.commit === data.repository.commit) return;
 
-  const before = matchIds(previousScan);
-  const after = matchIds(data);
-  const resolved = [...before].filter((id) => !after.has(id));
-  if (resolved.length === 0) return;
+  const { resolved, unverified } = analyzeRescanResolution(previousScan, data);
+  if (resolved.length === 0 && unverified.length === 0) return;
+
+  const sections = [];
+  if (resolved.length > 0) {
+    sections.push(`
+      <strong>No longer found after rescan</strong>
+      <ul>${resolved.map((finding) => `<li>${escapeHtml(finding.customer.path)}</li>`).join("")}</ul>
+    `);
+  }
+  if (unverified.length > 0) {
+    sections.push(`
+      <strong>Status not changed: file was not successfully rechecked</strong>
+      <ul>${unverified.map((finding) => `<li>${escapeHtml(finding.customer.path)}</li>`).join("")}</ul>
+    `);
+  }
 
   resolvedBox.hidden = false;
-  resolvedBox.innerHTML = `
-    <strong>No longer found after rescan</strong>
-    <ul>${resolved.map((id) => `<li>${escapeHtml(id.split("|")[0])}</li>`).join("")}</ul>
-  `;
+  resolvedBox.innerHTML = sections.join("");
 }
 
 function renderFindings(data) {
