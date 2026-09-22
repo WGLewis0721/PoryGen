@@ -16,6 +16,7 @@ function loadPack() {
 // Built once per warm instance.
 const pack = loadPack();
 const referenceIndex = pack ? referenceIndexFromPack(pack, legacyIndex) : legacyIndex;
+const CURRENT_TERMS_VERSION = "2026-09-22-v1";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
@@ -25,6 +26,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed." });
   }
   const body = typeof req.body === "string" ? safeJson(req.body) : req.body ?? {};
+  const acceptedAt = typeof body.termsAcceptedAt === "string" ? Date.parse(body.termsAcceptedAt) : NaN;
+  if (body.termsVersion !== CURRENT_TERMS_VERSION || !Number.isFinite(acceptedAt)) {
+    return res.status(428).json({ error: "Accept the current PoryGen Terms of Use before scanning." });
+  }
   const repositoryUrl = typeof body.repositoryUrl === "string" ? body.repositoryUrl.trim().slice(0, 300) : "";
   const { status, payload } = await scanRepository(repositoryUrl, { referenceIndex });
   return res.status(status).json(payload);

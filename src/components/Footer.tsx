@@ -22,6 +22,7 @@ export function Footer() {
           <Link to="/security">Security and data</Link>
           <Link to="/security#claims">What PoryGen doesn’t claim</Link>
           <Link to="/docs">Documentation</Link>
+          <Link to="/terms">Terms of Use</Link>
         </nav>
         <nav className="site-footer-col" aria-label="Account">
           <span className="label-caps">Account</span>

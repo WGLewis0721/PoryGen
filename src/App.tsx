@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./features/auth/AuthContext";
 import { ProtectedLayout } from "./features/auth/ProtectedRoute";
+import { RequireTerms } from "./features/legal/RequireTerms";
 import { MarketingLayout } from "./features/marketing/MarketingLayout";
 import { LandingPage } from "./features/marketing/LandingPage";
 
@@ -13,6 +14,7 @@ const NotFoundPage = lazy(() => import("./features/marketing/NotFoundPage").then
 const DemoPage = lazy(() => import("./features/demo/DemoPage").then((m) => ({ default: m.DemoPage })));
 const SignInPage = lazy(() => import("./features/auth/SignInPage").then((m) => ({ default: m.SignInPage })));
 const SignUpPage = lazy(() => import("./features/auth/SignUpPage").then((m) => ({ default: m.SignUpPage })));
+const TermsPage = lazy(() => import("./features/legal/TermsPage").then((m) => ({ default: m.TermsPage })));
 
 const DashboardPage = lazy(() => import("./features/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const FindingsPage = lazy(() => import("./features/findings/FindingsPage").then((m) => ({ default: m.FindingsPage })));
@@ -49,7 +51,15 @@ export default function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/how-it-works" element={<Lazy><HowItWorksPage /></Lazy>} />
             <Route path="/demo" element={<Lazy><DemoPage /></Lazy>} />
-            <Route path="/scan" element={<Lazy><PublicScanPage /></Lazy>} />
+            <Route
+              path="/scan"
+              element={
+                <RequireTerms>
+                  <Lazy><PublicScanPage /></Lazy>
+                </RequireTerms>
+              }
+            />
+            <Route path="/terms" element={<Lazy><TermsPage /></Lazy>} />
             <Route path="/pricing" element={<Lazy><PricingPage /></Lazy>} />
             <Route path="/security" element={<Lazy><SecurityPage /></Lazy>} />
             <Route path="/docs" element={<Lazy><DocsPage /></Lazy>} />

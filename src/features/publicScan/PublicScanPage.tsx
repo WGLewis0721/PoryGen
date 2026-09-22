@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ExternalLink, ScanSearch } from "lucide-react";
 import { CodeCompare } from "../../components/CodeCompare";
 import { useDocumentTitle } from "../../components/useDocumentTitle";
+import { getTermsAcceptance } from "../legal/termsAcceptance";
 import type { Finding, Range, ScanResult } from "./types";
 import "./public-scan.css";
 
@@ -66,7 +67,13 @@ const lineLabel = (r: Range | null) => (!r ? "" : r.start === r.end ? `line ${r.
 const pct = (v = 0) => `${Math.round(v * 100)}%`;
 const sourceHref = (f: Finding) => {
   const s = f.publicSource!;
-  return s.lines ? `${s.url}#L${s.lines.start}-L${s.lines.end}` : s.url;
+  if (!s.lines) return s.url;
+  try {
+    const host = new URL(s.url).hostname.toLowerCase();
+    return host === "github.com" ? `${s.url}#L${s.lines.start}-L${s.lines.end}` : s.url;
+  } catch {
+    return s.url;
+  }
 };
 
 function FindingCard({ finding, decision, onDecide }: { finding: Finding; decision?: Decision; onDecide: (d: Decision | null) => void }) {
@@ -169,11 +176,17 @@ export function PublicScanPage() {
     setError("");
     if (!isRescan) setResult(null);
     try {
+      const acceptance = getTermsAcceptance();
+      if (!acceptance) throw new Error("Accept the current Terms of Use before scanning.");
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ repositoryUrl: url }),
+        body: JSON.stringify({
+          repositoryUrl: url,
+          termsVersion: acceptance.version,
+          termsAcceptedAt: acceptance.acceptedAt,
+        }),
       });
       const data = await response.json().catch(() => ({ error: "The scanner is unavailable right now. Try again shortly." }));
       if (!response.ok) throw new Error(data.error || "Scan failed.");
@@ -257,7 +270,7 @@ export function PublicScanPage() {
             </button>
           </div>
           <p className="hint">
-            No account needed. Code is fetched, compared in memory and not stored. Try{" "}
+            No account needed. Source code is analyzed transiently and isn’t stored on PoryGen’s servers. Scan results may be saved in this browser. Try{" "}
             {EXAMPLES.map((ex, i) => (
               <span key={ex}>
                 {i > 0 && " or "}
@@ -272,7 +285,7 @@ export function PublicScanPage() {
       </form>
 
       <div role="status" aria-live="polite">
-        {busy && <p className="notice">Fetching the repository and checking it against indexed sources. This usually takes 5–20 seconds…</p>}
+        {busy && <p className="notice">Fetching the repository and checking it against indexed sources. This usually takes a few seconds; larger repositories can take longer…</p>}
         {error && !busy && (
           <p className="notice notice-error">
             <strong>Scan didn’t run.</strong> {error}
