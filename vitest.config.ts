@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    exclude: ['**/node_modules/**'],
+    // The isolated lab uses node:test and is run separately by npm test.
+    exclude: ['**/node_modules/**', 'labs/source-search-lab/**'],
   },
 })
