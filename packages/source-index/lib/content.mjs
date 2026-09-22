@@ -42,6 +42,10 @@ export function selectFile(path, content) {
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
+export const exactContentHash = (source) => sha256(source.replace(/\r\n?/g, "\n").replace(/[ \t]+$/gm, ""));
+
+const SEPARATOR = String.fromCharCode(1);
+
 /**
  * Two identities per file:
  *  - exactHash: byte content with line endings and trailing space normalized
@@ -55,8 +59,8 @@ const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 export function analyze(source, language, settings = DEFAULT_SETTINGS) {
   const preserving = tokenizeSource(source, language);
   const normalized = tokenizeSource(source, language, { normalizeIdentifiers: true });
-  const exactHash = sha256(source.replace(/\r\n?/g, "\n").replace(/[ \t]+$/gm, ""));
-  const shapeHash = sha256(preserving.map((t) => t.kind).join(""));
+  const exactHash = exactContentHash(source);
+  const shapeHash = sha256(preserving.map((t) => t.kind).join(SEPARATOR));
   const fingerprints = {
     preserving: [...new Set(fingerprintTokens(preserving, settings).map((f) => f.hash))],
     normalized: [...new Set(fingerprintTokens(normalized, settings).map((f) => f.hash))],

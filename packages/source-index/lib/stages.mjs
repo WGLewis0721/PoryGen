@@ -1,8 +1,7 @@
-import { createHash } from "node:crypto";
 import { analyze, AUXILIARY_PATH, DERIVED_PATH, selectFile } from "./content.mjs";
 import { packHashes, packSource, setMeta, transaction, unpackHashes, unpackSource } from "./db.mjs";
 import { rankCluster } from "./rank.mjs";
-import { fetchArchive, fetchRelease, npmDownloads, seedNpm, seedPypi } from "./registries.mjs";
+import { fetchArchive, fetchRelease, npmDownloads, seedNpm, seedPypi, verifyIntegrity } from "./registries.mjs";
 import { readTar, stripRoot } from "./tar.mjs";
 
 const log = (...args) => console.log(new Date().toISOString().slice(11, 19), ...args);
@@ -27,12 +26,6 @@ export async function downloads(db) {
 
 // ---- fetch -----------------------------------------------------------------
 
-function verifyIntegrity(buffer, integrity) {
-  if (!integrity) return true;
-  const [algorithm, expected] = integrity.split("-", 2);
-  const digest = createHash(algorithm).update(buffer);
-  return expected === (/^[0-9a-f]+$/.test(expected) ? digest.digest("hex") : digest.digest("base64"));
-}
 
 function fileCount(db) {
   return db.prepare("SELECT COUNT(*) AS n FROM files").get().n;
@@ -215,7 +208,8 @@ export function rankUpstreams(db) {
 export function exportPack(db, { documents: limit = 1000, stopPreserving = 30, stopNormalized = 8 } = {}) {
   const totalClusters = db.prepare("SELECT COUNT(*) AS n FROM clusters").get().n;
   const rows = db.prepare(`SELECT c.shape_hash, c.canonical_probability, c.occurrences, c.project_count, f.path, f.source_url,
-      b.language, b.source, p.ecosystem, p.name, p.rank, r.version, r.license_spdx, r.license_family, r.repository, r.first_published
+      b.language, b.source, b.exact_hash, p.ecosystem, p.name, p.rank, r.version, r.license_spdx, r.license_family, r.repository, r.first_published,
+      r.archive_url, r.archive_integrity
     FROM clusters c JOIN files f ON f.id = c.canonical_file_id JOIN blobs b ON b.id = f.blob_id
     JOIN releases r ON r.id = f.release_id JOIN projects p ON p.id = r.project_id
     ORDER BY p.rank, p.ecosystem, f.path`).all();
@@ -246,6 +240,9 @@ export function exportPack(db, { documents: limit = 1000, stopPreserving = 30, s
       upstreamProbability: row.canonical_probability,
       alsoPublishedIn: row.occurrences - 1,
       firstPublished: row.first_published,
+      archiveUrl: row.archive_url,
+      archiveIntegrity: row.archive_integrity,
+      exactHash: row.exact_hash,
     });
   }
 
@@ -287,5 +284,14 @@ export function stats(db) {
     multiOccurrenceClusters: one("SELECT COUNT(*) AS n FROM clusters WHERE occurrences > 1").n,
     licenses: db.prepare("SELECT license_family AS family, COUNT(*) AS n FROM releases GROUP BY 1").all(),
     sharedFingerprints: db.prepare("SELECT representation, COUNT(*) AS n, MAX(clusters) AS max FROM fingerprint_df GROUP BY 1").all(),
+  };
+}
+
+/** The pack without file contents: safe to commit, hydrated from the registries at build time. */
+export function toManifest(pack) {
+  return {
+    ...pack,
+    format: "porygen-corpus-manifest/1",
+    documents: pack.documents.map(({ source: _source, ...doc }) => doc),
   };
 }

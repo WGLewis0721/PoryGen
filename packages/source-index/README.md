@@ -40,10 +40,26 @@ matcher is unchanged, because `referenceIndexFromPack` rebuilds tokens and posti
 then applies the stoplist. Serving the whole corpus needs a retrieval service over `corpus.db`,
 which is the next step.
 
-## Status (2026-09-21)
+## Shipping the corpus
 
-A full build indexed 50,633 files from 1,017 packages in about 3.5 minutes. The pack is **not deployed**:
-the matcher's strong-match gate was tuned against 6 reference files, and against 1,000 files it
-passes generic 2–3 line snippets (for example, an axios helper reported as matching `qs`). Once that
-gate is recalibrated, commit nothing: run `npm run index:build`, and `api/scan.mjs` loads
-`corpus-pack.json` automatically whenever it's present in the deployment.
+`export` writes two files:
+
+- `corpus-manifest.json` is **committed**. It lists packages, exact versions, archive URLs, integrity
+  hashes, file paths and content hashes, plus the global stoplist (numbers only). It contains no
+  third-party source code.
+- `corpus-pack.json` is gitignored. It's the manifest with file contents.
+
+On Vercel, `vercel-build` runs [hydrate.mjs](hydrate.mjs) first. It re-downloads the pinned archives from
+npm and PyPI, verifies each archive's integrity and each file's content hash, and writes the pack
+into the deployment. It fails the build if more than 10% of files can't be fetched. That takes
+about 12 seconds for 1,000 files.
+
+To refresh the corpus, run `npm run index:build`, then commit `corpus-manifest.json`.
+
+## Strong-match calibration (2026-09-22)
+
+The matcher's strong gate was recalibrated against this corpus (`minStrongContiguousTokens`,
+`minRenamedCopyContiguousTokens` and `minRenamedCopyDistinctKinds` in
+[search.mjs](../../labs/source-search-lab/lib/search.mjs)). On 15 real repositories, all 10 observed false
+positives were removed and every true copy was kept. False positives peaked at 29 contiguous
+normalized tokens and 6 contiguous exact identifiers; true copies started at 32 and 9.

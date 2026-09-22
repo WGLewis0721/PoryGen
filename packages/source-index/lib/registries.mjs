@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { normalizeLicense } from "./license.mjs";
 
 const UA = { "User-Agent": "porygen-source-index (+https://porygen.vercel.app)" };
@@ -124,3 +125,10 @@ export async function pypiRelease(name) {
 
 export const fetchRelease = (ecosystem, name) => (ecosystem === "npm" ? npmRelease(name) : pypiRelease(name));
 export const fetchArchive = (url) => get(url, { as: "buffer", timeoutMs: 120_000 });
+
+export function verifyIntegrity(buffer, integrity) {
+  if (!integrity) return true;
+  const [algorithm, expected] = integrity.split("-", 2);
+  const digest = createHash(algorithm).update(buffer);
+  return expected === (/^[0-9a-f]+$/.test(expected) ? digest.digest("hex") : digest.digest("base64"));
+}
