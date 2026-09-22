@@ -1,6 +1,10 @@
 .ps { padding-block: var(--space-7) var(--space-9); display: flex; flex-direction: column; gap: var(--space-5); max-width: 1100px; }
 .ps-title { font-size: clamp(2rem, 5vw, 3rem); margin: 0; }
 .ps-intro .lede { max-width: 65ch; margin-top: var(--space-3); }
+.ps-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.ps-modes { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.35rem 1.25rem; }
+.ps-mode { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; font-size: var(--text-sm); }
+.ps-file { max-width: 100%; }
 .ps-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .ps-row .input { flex: 1 1 18rem; min-width: 0; }
 .ps-linkbtn { background: none; border: 0; padding: 0; color: var(--sunrise-400); text-decoration: underline; cursor: pointer; font-size: inherit; }
@@ -18,11 +22,21 @@
 .ps-facts { display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; margin: 0; font-size: var(--text-sm); }
 .ps-facts dt { color: var(--mist-500); font-size: var(--text-xs); }
 .ps-facts dd { margin: 0; color: var(--cloud-100); }
+.ps-read { display: grid; gap: 0.75rem; margin: 0; }
+.ps-read dt { color: var(--mist-500); font-size: var(--text-xs); font-weight: 600; }
+.ps-read dd { margin: 0.15rem 0 0; color: var(--cloud-100); overflow-wrap: anywhere; }
 .ps-actions, .ps-dismiss, .ps-footer-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
 .ps-actions svg { width: 1em; height: 1em; }
 .ps-demo-link { margin-top: var(--space-4); }
 .ps-possible > summary { cursor: pointer; color: var(--cloud-300); font-size: var(--text-sm); padding-block: 0.5rem; }
 .ps-possible[open] > summary { margin-bottom: var(--space-4); }
+.ps-paths { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.4rem 0.85rem; }
+.ps-paths > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.ps-paths ul { list-style: none; margin: 0; padding: 0 0 0.4rem; display: flex; flex-direction: column; gap: 0.2rem; max-height: 16rem; overflow: auto; }
+.ps-paths li { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; min-width: 0; }
+.ps-paths li .mono { overflow-wrap: anywhere; min-width: 0; }
+.ps-exclusion-list { margin: 0.45rem 0 0; padding-left: 1.1rem; list-style: disc; }
+.ps-exclusion-list li { overflow-wrap: anywhere; }
 @media (pointer: coarse) {
   .ps-actions .btn, .ps-dismiss .select { min-height: 44px; }
 }
