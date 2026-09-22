@@ -83,6 +83,11 @@ async function handleScan(req, res, { referenceIndex, repositoryFetcher }) {
         fetchedFiles: fetched.stats.fetchedFiles,
         fetchedBytes: fetched.stats.fetchedBytes,
         partial: fetched.partial || compared.errors.length > 0,
+        checkedFiles: fetched.stats.checkedFiles ?? fetched.files.map((file) => file.path),
+        supportedFilesInTree: fetched.stats.supportedFilesInTree ?? fetched.files.map((file) => file.path),
+        treeComplete: fetched.stats.treeComplete ?? fetched.stats.treeTruncated !== true,
+        incompleteSupportedFiles: fetched.stats.incompleteSupportedFiles ?? 0,
+        incompleteReasons: fetched.stats.incompleteReasons ?? {},
         treeTruncated: fetched.stats.treeTruncated,
         stoppedForLimit: fetched.stats.stoppedForLimit,
         skippedCount: fetched.stats.skippedCount,
@@ -104,7 +109,7 @@ async function handleScan(req, res, { referenceIndex, repositoryFetcher }) {
 function contentType(filePath) {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
   if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
-  if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (filePath.endsWith(".js") || filePath.endsWith(".mjs")) return "text/javascript; charset=utf-8";
   if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
   return "application/octet-stream";
 }
