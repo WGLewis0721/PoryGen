@@ -51,7 +51,14 @@ export async function scanRepository(repositoryUrl, {
         providerErrors: compared.errors,
       },
       summary: { strong, possible, insufficient, total: compared.findings.length },
-      findings: compared.findings,
+      // Weak matches are a long tail on big repos; return the strongest few and keep the true count.
+      findings: [
+        ...compared.findings.filter((f) => f.classification !== "possible_common_pattern"),
+        ...compared.findings
+          .filter((f) => f.classification === "possible_common_pattern")
+          .sort((a, b) => (b.metrics?.contiguousTokens ?? 0) - (a.metrics?.contiguousTokens ?? 0))
+          .slice(0, 25),
+      ],
       disclaimer:
         "Similarity is evidence to review, not proof of copying or AI authorship. No match means only that nothing sufficiently strong was found in this lab's indexed sources.",
     });
