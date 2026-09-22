@@ -1,0 +1,21 @@
+name: ZIP ingestion boundaries
+on:
+  push:
+    branches: [feature/zip-scan-ingestion]
+  pull_request:
+    paths: ['api/scan.mjs', 'labs/source-search-lab/lib/**', 'scripts/test-zip-ingestion.mjs', 'package*.json', '.github/workflows/zip-ingestion.yml']
+permissions:
+  contents: read
+jobs:
+  ingestion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:ingestion
+      - run: npm run build
