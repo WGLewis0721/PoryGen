@@ -28,6 +28,16 @@ const REASON_LABELS: Record<string, string> = {
   provider_failure: "failed to download",
 };
 
+/** People paste "owner/repo" and "github.com/owner/repo" as often as a full URL. */
+export function normalizeRepositoryInput(value: string) {
+  const text = value.trim().replace(/\/+$/, "");
+  if (!text) return "";
+  if (/^https?:\/\//i.test(text)) return text;
+  if (/^github\.com\//i.test(text)) return `https://${text}`;
+  if (/^[\w.-]+\/[\w.-]+$/.test(text)) return `https://github.com/${text}`;
+  return text;
+}
+
 const storageKey = (repo: string) => `porygen.scan.${repo.toLowerCase()}`;
 
 function load<T>(key: string): T | null {
@@ -102,8 +112,8 @@ function FindingCard({ finding, decision, onDecide }: { finding: Finding; decisi
         </div>
         {finding.metrics && (
           <>
-            <div><dt>Your file matched</dt><dd>{pct(finding.metrics.customerCoverage)}</dd></div>
-            <div><dt>Source matched</dt><dd>{pct(finding.metrics.sourceCoverage)}</dd></div>
+            <div><dt>Of the flagged snippet</dt><dd>{pct(finding.metrics.customerCoverage)} matches</dd></div>
+            <div><dt>Of the source file</dt><dd>{pct(finding.metrics.sourceCoverage)} matches</dd></div>
             <div><dt>Longest identical run</dt><dd>{finding.metrics.contiguousTokens} tokens</dd></div>
           </>
         )}
@@ -164,6 +174,7 @@ export function PublicScanPage() {
   const [input, setInput] = useState(repoParam);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [previous, setPrevious] = useState<ScanResult | null>(null);
+  const [rescanned, setRescanned] = useState(false);
   const [decisions, setDecisions] = useState<Decisions>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -194,6 +205,7 @@ export function PublicScanPage() {
       const stored = load<{ scan: ScanResult; decisions: Decisions }>(storageKey(next.repository.name));
       const kept = stored?.decisions ?? {};
       setPrevious(isRescan ? current.current : stored?.scan ?? null);
+      setRescanned(isRescan);
       setDecisions(kept);
       setResult(next);
       current.current = next;
@@ -207,17 +219,20 @@ export function PublicScanPage() {
   }, []);
 
   useEffect(() => {
-    if (repoParam && lastRun.current !== repoParam) {
-      lastRun.current = repoParam;
-      setInput(repoParam);
-      void run(repoParam, false);
+    // Shared links carry whatever was typed, including "owner/repo" shorthand.
+    const url = normalizeRepositoryInput(repoParam);
+    if (url && lastRun.current !== url) {
+      lastRun.current = url;
+      setInput(url);
+      void run(url, false);
     }
   }, [repoParam, run]);
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const url = input.trim();
+    const url = normalizeRepositoryInput(input);
     if (!url) return;
+    if (url !== input) setInput(url);
     if (url === repoParam) void run(url, false);
     else setParams({ repo: url });
   }
@@ -258,7 +273,7 @@ export function PublicScanPage() {
             <input
               id="repo-url"
               className="input mono"
-              type="url"
+              type="text"
               inputMode="url"
               placeholder="https://github.com/owner/repo"
               value={input}
@@ -323,12 +338,21 @@ export function PublicScanPage() {
               <strong>Nothing to compare.</strong> This repository has no JavaScript, TypeScript or Python files PoryGen can check yet.
             </p>
           )}
+          {result.scan.treeComplete === false && (
+            <p className="notice notice-warn">
+              <strong>Only part of this repository was checked.</strong> It is too large for GitHub to list in one
+              request, so PoryGen only ever saw{" "}
+              {(result.scan.skippedCount + result.scan.fetchedFiles).toLocaleString("en-US")} of its files, and found{" "}
+              {result.scan.supportedFilesInTree.length} it can check among them. Treat “no match” here as “not
+              checked”, not as clean.
+            </p>
+          )}
           {incomplete.length > 0 && (
             <p className="notice notice-warn">
               <strong>Partial scan.</strong> Some supported files weren’t checked: {incomplete.join(", ")}.
             </p>
           )}
-          {previous && sameCommit && <p className="notice">No new commits since the last scan, so results are unchanged.</p>}
+          {rescanned && sameCommit && <p className="notice">No new commits since the last scan, so results are unchanged.</p>}
           {resolved.length > 0 && (
             <p className="notice notice-ok">
               <strong>Resolved since the last scan:</strong> {resolved.map((f) => `${f.customer.path} ↔ ${f.publicSource?.repository}`).join(", ")}

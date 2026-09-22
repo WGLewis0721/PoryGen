@@ -23,3 +23,6 @@
 .ps-demo-link { margin-top: var(--space-4); }
 .ps-possible > summary { cursor: pointer; color: var(--cloud-300); font-size: var(--text-sm); padding-block: 0.5rem; }
 .ps-possible[open] > summary { margin-bottom: var(--space-4); }
+@media (pointer: coarse) {
+  .ps-actions .btn, .ps-dismiss .select { min-height: 44px; }
+}
