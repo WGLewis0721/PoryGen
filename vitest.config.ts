@@ -8,6 +8,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     // The isolated lab uses node:test and is run separately by npm test.
-    exclude: ['**/node_modules/**', 'labs/source-search-lab/**', 'PoryGen/**'],
+    exclude: ['**/node_modules/**', 'labs/source-search-lab/**', 'packages/source-index/**', 'PoryGen/**'],
   },
 })

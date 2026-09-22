@@ -1,7 +1,21 @@
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
+import { referenceIndexFromPack } from "../labs/source-search-lab/lib/corpus-pack.mjs";
 import { scanRepository } from "../labs/source-search-lab/lib/scan-service.mjs";
 
-const referenceIndex = createRequire(import.meta.url)("../labs/source-search-lab/data/reference-index.json");
+const require = createRequire(import.meta.url);
+const legacyIndex = require("../labs/source-search-lab/data/reference-index.json");
+
+// Optional: present only when a corpus pack was built into this deployment.
+function loadPack() {
+  const file = path.join(process.cwd(), "labs/source-search-lab/data/corpus-pack.json");
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+}
+
+// Built once per warm instance.
+const pack = loadPack();
+const referenceIndex = pack ? referenceIndexFromPack(pack, legacyIndex) : legacyIndex;
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");

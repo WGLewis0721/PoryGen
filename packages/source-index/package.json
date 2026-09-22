@@ -1,0 +1,13 @@
+{
+  "name": "@porygen/source-index",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Offline pipeline that builds PoryGen's public reference corpus from npm and PyPI.",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "build": "node cli.mjs build",
+    "stats": "node cli.mjs stats",
+    "test": "node --test test/*.test.mjs"
+  }
+}
