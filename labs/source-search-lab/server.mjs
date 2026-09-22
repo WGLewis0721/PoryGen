@@ -68,6 +68,10 @@ async function handleScan(req, res, { referenceIndex, repositoryFetcher }) {
     const strong = compared.findings.filter((f) => f.classification === "strong_match").length;
     const possible = compared.findings.filter((f) => f.classification === "possible_common_pattern").length;
     const insufficient = compared.findings.filter((f) => f.classification === "insufficient_evidence").length;
+    const comparisonErrorFiles = new Set(compared.errors.map((error) => error.file));
+    const successfullyCheckedFiles = fetched.files
+      .map((file) => file.path)
+      .filter((path) => !comparisonErrorFiles.has(path));
 
     return sendJson(res, 200, {
       repository: {
@@ -83,7 +87,7 @@ async function handleScan(req, res, { referenceIndex, repositoryFetcher }) {
         fetchedFiles: fetched.stats.fetchedFiles,
         fetchedBytes: fetched.stats.fetchedBytes,
         partial: fetched.partial || compared.errors.length > 0,
-        checkedFiles: fetched.stats.checkedFiles ?? fetched.files.map((file) => file.path),
+        checkedFiles: successfullyCheckedFiles,
         supportedFilesInTree: fetched.stats.supportedFilesInTree ?? fetched.files.map((file) => file.path),
         treeComplete: fetched.stats.treeComplete ?? fetched.stats.treeTruncated !== true,
         incompleteSupportedFiles: fetched.stats.incompleteSupportedFiles ?? 0,
