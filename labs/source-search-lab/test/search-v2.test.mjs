@@ -292,3 +292,16 @@ test("verification reports both customer and source coverage separately", () => 
   assert.notEqual(evidence.customerLines, null);
   assert.notEqual(evidence.sourceLines, null);
 });
+
+
+test("Python normalized tokens preserve floor-division and walrus operators", () => {
+  const tokens = tokenizeSource("def halve(value):\n    if (half := value // 2):\n        return half\n", "python", {
+    normalizeIdentifiers: true,
+  });
+  const kinds = tokens.map((token) => token.kind);
+
+  assert.ok(kinds.includes("//"));
+  assert.ok(kinds.includes(":="));
+  assert.equal(kinds.filter((kind) => kind === "//").length, 1);
+  assert.equal(kinds.filter((kind) => kind === ":=").length, 1);
+});
