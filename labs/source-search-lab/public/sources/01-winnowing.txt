@@ -1,4 +1,0 @@
-Title: Winnowing fingerprints
-Tags: code, similarity, fingerprints, plagiarism
-
-Winnowing is a document fingerprinting technique. A program first turns content into a sequence of tokens, hashes small overlapping groups, and keeps selected hashes as fingerprints. Two documents that share many uncommon fingerprints may contain similar passages even when spacing or formatting changes.

@@ -1,10 +1,12 @@
 {
   "name": "porygen-source-search-lab",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test"
+    "build:index": "node scripts/build-index.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:public": "RUN_PUBLIC_E2E=1 node --test test/public-e2e.test.mjs"
   }
 }

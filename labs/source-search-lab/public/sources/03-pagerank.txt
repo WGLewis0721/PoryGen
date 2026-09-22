@@ -1,4 +1,0 @@
-Title: PageRank basics
-Tags: search, ranking, links
-
-PageRank is a link-analysis method associated with early Google. A page receives more authority when other pages link to it, especially when those linking pages are themselves important. PageRank helps rank candidates but does not replace text relevance.
