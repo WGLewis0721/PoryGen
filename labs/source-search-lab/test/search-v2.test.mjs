@@ -296,14 +296,19 @@ test("verification reports both customer and source coverage separately", () => 
 
 test("literal-only changes still recover the source while identifiers carry the specific evidence", () => {
   const indexedSource = `
-export function isValidCode(code) {
+export function isValidCode(code, registry, options) {
   if (code === "LEGACY_MODE") {
-    return true;
+    return registry.allowLegacy && options.strict !== true;
   }
-  if (code.length > 42) {
+  if (code.length > 42 || registry.blocked.includes(code)) {
     return false;
   }
-  return code === "DEFAULT";
+  const normalized = options.caseSensitive ? code : code.toUpperCase();
+  const entry = registry.lookup(normalized);
+  if (!entry) {
+    return normalized === "DEFAULT";
+  }
+  return entry.enabled && !entry.deprecated && entry.version >= options.minVersion;
 }
 `;
   const literalChanged = indexedSource

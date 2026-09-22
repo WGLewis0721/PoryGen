@@ -42,5 +42,5 @@ supabase/.temp
 
 # Source-index working database (rebuilt by packages/source-index)
 packages/source-index/data/
-# Generated corpus pack; not served until the strong-match gate is recalibrated at corpus scale
+# Hydrated at build time from the committed corpus-manifest.json; third-party source never enters git
 labs/source-search-lab/data/corpus-pack.json

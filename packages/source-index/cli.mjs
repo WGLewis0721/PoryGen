@@ -4,7 +4,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { openCorpus } from "./lib/db.mjs";
-import { computeFrequencies, downloads, exportPack, fetchProjects, rankUpstreams, seed, stats } from "./lib/stages.mjs";
+import { computeFrequencies, downloads, exportPack, fetchProjects, rankUpstreams, seed, stats, toManifest } from "./lib/stages.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { positionals, values } = parseArgs({
@@ -19,6 +19,7 @@ const { positionals, values } = parseArgs({
     "stop-preserving": { type: "string", default: "30" },
     "stop-normalized": { type: "string", default: "8" },
     out: { type: "string", default: path.join(here, "..", "..", "labs", "source-search-lab", "data", "corpus-pack.json") },
+    manifest: { type: "string", default: path.join(here, "..", "..", "labs", "source-search-lab", "data", "corpus-manifest.json") },
   },
 });
 
@@ -30,7 +31,7 @@ stages (run in order; "build" runs all of them):
   downloads   fill npm monthly download counts (authority signal)
   frequencies global fingerprint frequencies per cluster/project
   rank        choose the likely upstream occurrence per cluster
-  export      write the scanner corpus pack                    --documents 1000 --stop-preserving 30 --stop-normalized 8
+  export      write the corpus pack + committable manifest                    --documents 1000 --stop-preserving 30 --stop-normalized 8
   stats       print corpus statistics
   build       seed → fetch → downloads → frequencies → rank → export`;
 
@@ -50,7 +51,8 @@ const stages = {
   export: () => {
     const pack = exportPack(db, { documents: n("documents"), stopPreserving: n("stop-preserving"), stopNormalized: n("stop-normalized") });
     writeFileSync(values.out, JSON.stringify(pack));
-    console.log(`wrote ${values.out}: ${pack.coverage.claim}`);
+    writeFileSync(values.manifest, JSON.stringify(toManifest(pack)));
+    console.log(`wrote ${values.out} and ${values.manifest}: ${pack.coverage.claim}`);
     console.log(`stoplist: ${pack.stoplist.preserving.length} preserving, ${pack.stoplist.normalized.length} normalized fingerprints`);
   },
   stats: () => console.log(JSON.stringify(stats(db), null, 2)),

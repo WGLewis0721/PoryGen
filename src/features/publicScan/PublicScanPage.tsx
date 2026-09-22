@@ -130,7 +130,7 @@ function FindingCard({ finding, decision, onDecide }: { finding: Finding; decisi
           rel="noreferrer"
           onClick={() => !decision && onDecide({ status: "reviewing", at: new Date().toISOString() })}
         >
-          Review source on GitHub <ExternalLink aria-hidden="true" />
+          Open the source <ExternalLink aria-hidden="true" />
         </a>
         {dismissed ? (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDecide(null)}>Reopen</button>

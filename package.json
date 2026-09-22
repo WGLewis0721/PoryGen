@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "vercel-build": "node packages/source-index/hydrate.mjs && npm run build",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run && npm --prefix labs/source-search-lab test && npm --prefix packages/source-index test",

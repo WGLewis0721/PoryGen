@@ -51,6 +51,16 @@ export const DEFAULT_SETTINGS = Object.freeze({
   minPreservingMatchedTokens: 18,
   minPreservingContiguousTokens: 9,
   minRarePreservingFingerprintMatches: 3,
+  // Corpus-scale calibration (50k-file npm/PyPI corpus): ordered-subsequence
+  // overlap is near-universal between unrelated code once there are thousands
+  // of candidates, so strong matches must rest on contiguous runs. Observed:
+  // false positives peaked at 29 normalized / 6 exact-spelling contiguous
+  // tokens; true copies started at 32 / 9.
+  minStrongContiguousTokens: 30,
+  // A renamed-identifier copy loses exact spelling but keeps its shape; only a
+  // run covering most of a region is accepted on shape alone.
+  minRenamedCopyContiguousTokens: 80,
+  minRenamedCopyDistinctKinds: 14,
 });
 
 export function detectLanguage(path) {
@@ -447,7 +457,11 @@ export function verifyCandidate(region, candidate, document, settings = DEFAULT_
   const querySpecific = specificTokens(queryPreservingTokens);
   const candidateSpecific = specificTokens(candidatePreservingTokens);
   const preservingMatchedTokens = lcsLength(querySpecific, candidateSpecific);
-  const preservingContiguous = longestCommonContiguous(querySpecific, candidateSpecific);
+  // Copies often edit string/number literals; an identifier-only run still ties the code to its source.
+  const identifiersOnly = (tokens) => tokens.filter((token) => token.kind.startsWith("id:"));
+  const specificRun = longestCommonContiguous(querySpecific, candidateSpecific);
+  const identifierRun = longestCommonContiguous(identifiersOnly(querySpecific), identifiersOnly(candidateSpecific));
+  const preservingContiguous = identifierRun.length > specificRun.length ? identifierRun : specificRun;
   const rarePreservingFingerprintMatches = candidate.preservingRareMatchedHashes ?? 0;
 
   const customerMatchLines = lineRange(queryTokens, contiguous.aStart, contiguous.length);
@@ -458,10 +472,17 @@ export function verifyCandidate(region, candidate, document, settings = DEFAULT_
     contiguous.length >= settings.minContiguousTokens &&
     smallerCoverage >= settings.minSmallerCoverage;
 
+  const minStrongContiguous = settings.minStrongContiguousTokens ?? DEFAULT_SETTINGS.minStrongContiguousTokens;
+  const minRenamedContiguous = settings.minRenamedCopyContiguousTokens ?? DEFAULT_SETTINGS.minRenamedCopyContiguousTokens;
   const specificEvidence =
-    preservingMatchedTokens >= settings.minPreservingMatchedTokens ||
-    preservingContiguous.length >= settings.minPreservingContiguousTokens ||
-    rarePreservingFingerprintMatches >= settings.minRarePreservingFingerprintMatches;
+    (contiguous.length >= minStrongContiguous &&
+      preservingContiguous.length >= settings.minPreservingContiguousTokens &&
+      (preservingMatchedTokens >= settings.minPreservingMatchedTokens ||
+        rarePreservingFingerprintMatches >= settings.minRarePreservingFingerprintMatches)) ||
+    (contiguous.length >= minRenamedContiguous &&
+      // Repetitive runs (import/export lists, tables) have identical shape everywhere.
+      new Set(queryTokens.slice(contiguous.aStart, contiguous.aStart + contiguous.length).map((t) => t.kind)).size >=
+        (settings.minRenamedCopyDistinctKinds ?? DEFAULT_SETTINGS.minRenamedCopyDistinctKinds));
 
   const lowCorpusCommonality = candidate.commonFingerprintRatio < settings.strongCommonFingerprintRatio;
 
