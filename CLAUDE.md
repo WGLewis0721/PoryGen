@@ -1,18 +1,23 @@
 # PoryGen — project facts
 
-- **What:** source-risk protection for AI-assisted development. Checks code for suspicious similarity to indexed public source and shows source/license evidence for human review. Not an AI detector, not proof of copying, not legal certification.
-- **Audience:** AI-native founders and small engineering teams.
-- **Primary CTA:** **Scan a repo** → `/scan`. No account required.
+- **What:** PoryGen checks code for meaningful similarity to indexed public source and shows where the code may have come from. Not an AI detector, not proof of copying, not proof of infringement, not proof of originality, and not legal certification.
+- **Core question:** “Does this code meaningfully resemble code that exists somewhere else, and where might it have come from?”
+- **Audience:** developers and small software teams. Code may be handwritten, copied/adapted from public source, AI-assisted, AI-generated, inherited, or mixed. Do not narrow the product to specific models, agents, IDEs or app builders.
+- **Primary CTA:** **Scan** → /scan. No account required.
 - **Live:** https://porygen.vercel.app
-- **MVP status:** working public MVP. Real public GitHub scans run in production through `api/scan.mjs`.
-- **Production scanner:** Source Search V2 under `labs/source-search-lab`, promoted from the validated lab. Do not replace it with the older production pipeline unless intentionally integrating capabilities.
-- **Current coverage:** 1,006 canonical files from 199 popular npm/PyPI packages plus 6 pinned repo files, JS/TS/Python. Built offline by `packages/source-index` from a 50k-file corpus; shipped as a code-free manifest hydrated at build time. Always describe coverage as limited.
-- **Current limits:** public repos only; 150 files; 100 KB/file; 2 MB total; bounded request time. GitHub truncates huge repo listings — the UI must keep saying so.
-- **Strong reporting rule:** normalized structural overlap alone is never enough. Strong matches require contiguous evidence (>=30 normalized tokens and >=9 exact identifier/literal tokens, or an 80-token structurally varied run for renamed copies), calibrated at corpus scale; otherwise report possible/common or abstain.
-- **Actions:** source review, browser-local dismiss/reopen, rescan, safe resolution.
-- **Sample demo:** `/demo` is fictional data and remains secondary to the real `/scan` path.
-- **Existing stack:** React 19 + TypeScript + Vite + React Router; Vercel. Supabase/Postgres/RLS, billing, and provenance/history code remain as groundwork for the connected product but are not required for the public MVP scan.
-- **Secrets:** production `GITHUB_TOKEN` is server-side only. Never place tokens in docs or browser code.
-- **Next:** harden public endpoint → GitHub App/private repos/durable state → broaden source coverage → async scanning → push/PR automation → Stripe/APEX repo entitlements.
-- **Do not:** restart open-ended matching research without a concrete production failure; put signup ahead of the first scan; claim exhaustive coverage; expose proprietary scoring logic client-side.
-- **Pointers:** README.md, ROADMAP.md, docs/ARCHITECTURE.md, docs/SCANNER.md, docs/SECURITY.md.
+- **MVP status:** working multi-input MVP. /scan accepts public GitHub, ZIP upload, or local folder.
+- **Production scanner:** all inputs converge on the existing Source Search V2 / PoryGen Engine path. Do not create a second matcher.
+- **Current coverage:** production corpus pack serves 1,000 canonical package-source files from 199 popular npm/PyPI packages; the offline corpus contains 50,633 files across 1,017 packages/projects. A small pinned V2 set remains for fixtures/regressions. Always describe coverage as limited.
+- **Current source limits:** 150 matched files, 100 KB/file, 2 MB accepted source, bounded request time. ZIP adds 2.9 MB compressed / 1,000 entries / 10 MB expanded-declared bounds. Server validation is authoritative.
+- **Strong reporting rule:** normalized structural overlap alone is never enough. Strong matches require source-specific contiguous/rarity evidence; otherwise report possible/common or abstain.
+- **Upload privacy:** ZIP/folder source is transient, not intentionally persisted server-side, and upload results/source excerpts must not be written to localStorage/sessionStorage.
+- **GitHub state:** public GitHub scan/review state may remain browser-local; private connected GitHub is later.
+- **Actions:** source review, dismiss/reopen, exclusions, GitHub rescan, safe resolution.
+- **Sample demo:** /demo is fictional data and secondary to the real /scan path.
+- **Existing stack:** React 19 + TypeScript + Vite + React Router; Vercel. Supabase/Postgres/RLS, billing and older provenance/history work remain reusable groundwork but must not block the first scan.
+- **Secrets:** production GITHUB_TOKEN is server-side only. Never place credentials in docs or browser code.
+- **Next net-new product:** Source Match Report.
+- **Roadmap order:** Source Match Report → MCP → CLI → Engine/corpus scale-up → connected GitHub + continuous monitoring → monetization/teams later.
+- **Parallel hardening:** abuse/rate limiting, monitoring, Privacy/data-handling, secret hygiene, counsel review, repository privacy before deeper proprietary Engine logic.
+- **Do not:** redefine the product as AI detection or compliance; reopen open-ended matcher research without a concrete production failure; put signup ahead of first value; claim exhaustive coverage; expose proprietary ranking logic client-side.
+- **Pointers:** README.md, ROADMAP.md, docs/ARCHITECTURE.md, docs/SCANNER.md, docs/ZIP_SCAN_API.md, docs/SECURITY.md.
