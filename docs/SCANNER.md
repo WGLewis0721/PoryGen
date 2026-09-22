@@ -1,38 +1,48 @@
 # Scanner
 
-## Live scanner
+## Production scanner
 
-The production MVP scanner is Source Search V2, exposed through `POST /api/scan`.
+The production scanner is the existing Source Search V2 / PoryGen Engine path exposed through POST /api/scan.
 
-The main implementation lives under:
+Customer input can come from:
 
-```
+- a public GitHub repository;
+- an uploaded ZIP;
+- browser-selected local project files.
+
+These are ingestion modes, not separate matchers.
+
+Main implementation areas:
+
+\`\`\`
+api/scan.mjs
 labs/source-search-lab/
   lib/github-source.mjs
+  lib/upload-source.mjs
+  lib/upload-service.mjs
+  lib/upload-worker.mjs
+  lib/ingestion-policy.mjs
   lib/scan-service.mjs
   lib/search.mjs
   data/reference-index.json
-```
-
-The current location is historical: the engine was validated as an isolated lab before being wired into production. Once the public MVP stabilizes, these modules should move into a production package without changing behavior.
+packages/source-index/
+\`\`\`
 
 ## Request flow
 
-```
-repository URL
-  → validate github.com URL
-  → resolve latest default-branch commit
-  → fetch recursive Git tree
-  → choose supported source files
-  → fetch source text
+\`\`\`
+GitHub / ZIP / local files
+  → validate source input
+  → select safe supported source files
+  → apply user exclusions
   → tokenize
   → fingerprint
-  → retrieve candidates
+  → retrieve indexed candidates
   → verify candidates
   → report strong / possible-common / abstain
-```
+\`\`\`
 
-The engine never executes repository code.
+The engine never executes customer code.
 
 ## Supported languages
 
@@ -40,193 +50,186 @@ The engine never executes repository code.
 - TypeScript
 - Python
 
-JS and TS are treated as compatible for candidate matching. Python is compared within the Python language family.
+JS/TS are treated as compatible for candidate matching. Python remains in its language family.
 
 ## Token representations
 
-The engine uses two representations.
-
 ### Preserving
 
-Keeps identifier and literal spelling.
-
-Examples include:
-
-- `id:Queue`
-- `id:#head`
-- `lit:"safe"`
-
-This representation provides source-specific evidence.
+Keeps identifier and literal spelling and provides source-specific evidence.
 
 ### Normalized
 
-Collapses identifiers and literals while preserving structural tokens.
+Collapses identifiers/literals while preserving structural tokens so candidate retrieval tolerates renaming, formatting and some literal changes.
 
-This makes candidate retrieval robust to renaming, formatting, and some literal changes.
-
-Normalized structure is useful for **finding candidates** but is not sufficient by itself for a strong customer-facing source attribution.
+Normalized structure is useful for finding candidates; it is not sufficient by itself for strong source attribution.
 
 ## Fingerprinting and retrieval
 
-Current settings are stored with the reference index.
-
-Key defaults:
+Core behavior includes:
 
 - 7-token shingles;
-- Winnowing window 4;
-- 120-token regions;
-- 60-token region stride;
-- 20-candidate shortlist per region.
+- Winnowing fingerprints;
+- bounded candidate shortlists;
+- corpus-common fingerprint suppression/downweighting;
+- rarity/frequency signals;
+- stable per-candidate retrieval accounting.
 
-The inverted index maps fingerprint hashes to candidate documents.
+The production package corpus is hydrated from pinned source archives at build time.
 
-Corpus-common fingerprints are downweighted.
+## Verification and reporting
 
-Each query fingerprint contributes at most once to a candidate retrieval score so repeated occurrences cannot artificially inflate ranking.
+Candidates are verified with ordered/contiguous evidence.
 
-## Verification
+Evidence can include:
 
-Candidates are verified using ordered token matching and longest contiguous spans.
-
-Evidence includes:
-
-- matched token count;
-- longest contiguous matched run;
-- customer-region coverage;
-- source-region coverage;
-- customer line range;
-- source line range;
+- matched token counts;
+- longest contiguous runs;
+- customer/source coverage;
+- preserving-token evidence;
+- rare preserving fingerprints;
+- customer/source line ranges;
 - excerpts.
 
-## Reporting gate
+Strong findings require source-specific evidence in addition to normalized structural similarity.
 
-The engine separates **retrieval confidence** from **reporting confidence**.
+Current calibrated strong behavior includes the existing source-specific contiguous/rarity gate; do not loosen it casually.
 
-A strong match requires all of the following kinds of support:
-
-- substantial normalized structural overlap;
-- sufficient ordered/contiguous overlap;
-- sufficient smaller-side coverage;
-- low enough corpus-common evidence;
-- meaningful source-specific evidence.
-
-Source-specific evidence comes from preserving-token overlap and/or rare preserving fingerprints.
-
-This prevents ordinary same-shape implementations from becoming strong attributions.
-
-### Outcomes
+Outcomes:
 
 **Strong match**  
-The evidence is specific enough to surface the public source for review.
+Specific enough to name the indexed public source for review.
 
 **Possible / common pattern**  
-There is meaningful similarity, but the evidence may be explained by ordinary structure or insufficiently unique code.
+Meaningful similarity exists, but the evidence may be ordinary/common or insufficiently unique.
 
 **Insufficient evidence / abstention**  
 Nothing is specific enough to justify naming a source.
 
-Multiple public sources may independently earn strong status. The engine does not force one winner.
+Multiple sources may independently qualify. The Engine does not force one winner.
 
-## Duplicate evidence
+## Corpus
 
-Overlapping customer regions that identify the same public source are collapsed into one coherent finding rather than repeated customer-facing cards.
+Offline corpus pipeline:
 
-## Reference corpus
+- 50,633 files;
+- 1,017 packages/projects;
+- 48,711 unique blobs;
+- 48,633 deduplicated clusters.
 
-The live index currently contains 6 pinned files from 3 public repositories:
+Production corpus pack:
 
-| Repository | Language |
-|---|---|
-| `sindresorhus/yocto-queue` | JavaScript |
-| `date-fns/date-fns` | TypeScript |
-| `psf/requests` | Python |
+- 1,000 canonical package-source files;
+- 199 popular npm/PyPI packages.
 
-Every entry is pinned to a commit and has source/license metadata.
+The small pinned V2 reference index remains for documented fixtures/regressions.
 
-This is intentionally small MVP coverage.
-
-A clean result means:
-
-> no sufficiently specific match was found in this index.
-
-It does not mean:
-
-> the code is original.
+A clean result means no sufficiently specific match was found in the indexed sources actually searched. It does not mean the code is original.
 
 ## GitHub ingestion
 
-`github-source.mjs` accepts only public HTTPS GitHub repository URLs.
+The GitHub path validates public GitHub repository references, resolves the latest default-branch commit/tree, selects supported files and fetches source from approved GitHub hosts.
 
-It uses GitHub REST for:
+A server-side GITHUB_TOKEN may increase REST capacity.
 
-- repository metadata;
-- default-branch commit;
-- recursive tree.
+GitHub source is not executed or cloned for execution.
 
-Source content is fetched from `raw.githubusercontent.com`, which avoids consuming one REST API request per source file.
+## ZIP ingestion
 
-A configured server-side `GITHUB_TOKEN` increases GitHub REST capacity.
+ZIP upload behavior is defined in [ZIP_SCAN_API.md](ZIP_SCAN_API.md).
+
+Important properties:
+
+- compressed-size bound;
+- declared/actual expanded-size bounds;
+- entry-count bound;
+- no absolute/traversal paths;
+- no symlink/special-file escapes;
+- no duplicate paths;
+- malformed/integrity failures rejected;
+- suspicious compression rejected;
+- nested archives ignored rather than unpacked;
+- binaries/invalid UTF-8 skipped;
+- dependencies/build/generated paths ignored;
+- bounded worker time/concurrency;
+- no source execution.
+
+## Browser-selected file ingestion
+
+Local folder selection sends project-relative files to the same API/source abstraction.
+
+Client-side filtering avoids obviously unsupported/dependency files, but the server remains authoritative.
+
+Folder path identity uses the submitted relative path, including the selected root folder when the browser provides it.
+
+## Exclusions
+
+User exclusions are exact relative file/folder paths, not globs.
+
+A directory rule matches that directory and descendants without accidentally matching same-prefix siblings.
+
+Exclusions happen before matching and are reported back in scan metadata.
+
+Excluding a path does not resolve an earlier finding.
 
 ## Limits
 
-Current production limits:
+Common source limits:
 
-- 40 fetched supported files;
-- 100 KB per file;
-- 750 KB total source;
-- 15-second fetch budget;
-- up to 40 detailed skip records.
+- 150 matched files;
+- 100 KB/file;
+- 2 MB accepted source.
 
-Excluded directory names include common vendor, build, generated, virtual-environment, and dependency directories.
+ZIP limits:
+
+- 2.9 MB compressed;
+- 1,000 entries;
+- 10 MB declared/expanded archive budget.
+
+The request JSON envelope is bounded below Vercel's platform request ceiling.
+
+See [ZIP_SCAN_API.md](ZIP_SCAN_API.md) for detailed limits/errors.
 
 ## Completeness
 
-Completeness accounting is separate from the visible skipped-file list.
+Completeness accounting is separate from the capped visible skipped-file details.
 
-Incomplete reasons include:
+Reasons can include:
 
 - file too large;
-- decoded file too large;
-- provider/download failure;
-- time limit;
 - file limit;
-- total-byte limit.
+- total-byte limit;
+- provider failure;
+- processing timeout;
+- binary/unsupported source;
+- upload ingestion omissions.
 
-The UI shows a partial-scan warning when appropriate.
+Intentional user exclusions are disclosed but should not be mislabeled as matcher failure.
 
-## Safe rescan resolution
+## Privacy
 
-The public scanner can compare the previous browser-stored scan with a new scan.
+Responses use no-store.
 
-A previous finding only counts as resolved when:
+Customer code is held transiently for analysis and is not sent to a runtime LLM.
 
-- its file was successfully rechecked; or
-- the new Git tree is complete and proves the file no longer exists.
+The server does not intentionally persist uploaded source.
 
-If a partial scan simply did not reach the file, PoryGen does not claim it was fixed.
+The upload UI does not persist upload source, excerpts or complete upload scan results in localStorage/sessionStorage.
 
-## Privacy behavior
-
-The public request path is POST-only and uses no-store responses.
-
-Customer source is fetched for the scan and held transiently in request memory. The public MVP does not persist source files or findings server-side.
-
-The browser may store the last scan response and review/dismiss decisions in local storage for that repository.
+Public GitHub browser-local review/rescan state remains a separate behavior.
 
 ## Validation status
 
-The V2 engine has regression coverage for retrieval, reporting, completeness, rescan safety, tokenizer edge cases, index freshness, and a live GitHub fixture.
+The Engine has regression coverage for retrieval, reporting, completeness, rescan safety, tokenizer behavior and index freshness.
 
-The product is now in the phase where real user behavior should drive matcher changes. Do not reopen open-ended threshold research unless production use exposes a concrete failure.
+ZIP/folder ingestion has focused security/API tests, and the merged multi-input release passed one real HTTP ZIP → ingestion → Engine → strong-match gate.
 
-## Future scanner work
+Do not turn routine product work into broad matcher benchmarking. Reopen matcher research when production evidence identifies a concrete accuracy issue.
 
-See [ROADMAP.md](../ROADMAP.md).
+## Next scanner work
 
-The important next technical steps are:
+The next customer-facing addition is **Source Match Report**.
 
-1. expand source coverage;
-2. move stable production code out of `labs/`;
-3. support durable connected-repo state;
-4. add async workers for larger repositories;
-5. add automatic GitHub change scanning.
+After that, scanner access expands through MCP and CLI, followed by larger corpus retrieval and connected/continuous GitHub use.
+
+See [../ROADMAP.md](../ROADMAP.md).
