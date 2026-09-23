@@ -56,6 +56,10 @@ The product promise remains:
 - [x] User-selected starter/template/boilerplate exclusions before matching
 - [x] Strong match / possible-common-pattern / abstention outcomes
 - [x] Source-specific evidence required for strong matches
+- [x] Conventional one-line/common patterns cannot become strong matches without stronger source-specific evidence (PR #21)
+- [x] Zero eligible files return an explicit **No eligible source files were scanned** state
+- [x] Partial scans visibly disclose incompleteness and scope no-match language to files actually checked
+- [x] Final PR #21 production smoke: Apex PASS; `itsm-tier1-agent` zero-file PASS; PoryGen partial-scan PASS
 - [x] Side-by-side excerpts and matched line ranges
 - [x] Public-source links and source/license metadata
 - [x] Developer-readable explanation of why a finding matched
@@ -123,7 +127,7 @@ A small pinned V2 reference set is also retained for documented fixtures/regress
 - production serves only a subset of the existing offline corpus;
 - GitHub review/dismiss history is browser-local;
 - uploaded-project results intentionally disappear when the page/session is gone;
-- no durable Source Match Report yet;
+- Source Match Report exists in open PR #20 but is not yet merged/deployed; the current implementation is a local standalone HTML/printable export, not durable hosted sharing;
 - no MCP server;
 - no CLI;
 - no GitHub App;
@@ -174,7 +178,7 @@ Delivered:
 
 ## Phase 2 — Source Match Report
 
-**Status: NEXT**
+**Status: IN FLIGHT — IMPLEMENTED IN PR #20, NOT MERGED/DEPLOYED**
 
 **Goal:** Turn one completed scan into a clean artifact that answers the source-match question without forcing someone to re-read the scan UI.
 
@@ -182,25 +186,31 @@ The name is **Source Match Report**, not “compliance report,” “originality
 
 ### Report contents
 
-- [ ] project/source label and scan timestamp;
-- [ ] what input was scanned;
-- [ ] coverage and completeness;
-- [ ] strong findings;
-- [ ] possible/common findings where useful;
-- [ ] affected file and matched lines;
-- [ ] possible public source;
-- [ ] source/license/version metadata already known by the Engine;
-- [ ] side-by-side or compact evidence;
-- [ ] exclusions;
-- [ ] dismissed/reviewed findings and notes where available;
+- [x] project/source label and scan timestamp;
+- [x] what input was scanned;
+- [x] coverage and completeness;
+- [x] strong findings;
+- [x] possible/common findings where useful;
+- [x] affected file and matched lines;
+- [x] possible public source;
+- [x] source/license/version metadata already known by the Engine;
+- [x] side-by-side or compact evidence;
+- [x] exclusions;
+- [x] dismissed/reviewed findings and notes where available;
 - [ ] explicit limitations: indexed-source coverage, not proof of copying/originality, not legal advice.
 
 ### Privacy rules
 
-- [ ] Do not persist uploaded source merely to create a report.
-- [ ] Prefer a downloadable/exportable report first.
-- [ ] If private sharing is later added, persist only what is deliberately required and make the retention boundary explicit.
-- [ ] Do not call the output a certificate.
+- [x] Do not persist uploaded source merely to create a report.
+- [x] Prefer a downloadable/exportable report first.
+- [x] If private sharing is later added, persist only what is deliberately required and make the retention boundary explicit.
+- [x] Do not call the output a certificate.
+
+### Implementation status
+
+PR #20 builds the report locally in the browser as a self-contained HTML file with browser Print/PDF support. It includes scope, completeness, exclusions, strong and possible findings, matched lines, pinned source/license/version metadata, compact evidence, current review/dismissal decisions and explicit limitations. The implementation adds no report API or hosted persistence.
+
+Focused report tests and the production build passed on the PR branch. Browser print/PDF output has not yet been visually verified. Because PR #21 landed afterward, PR #20 must be reconciled with current main before merge/deploy.
 
 ### Exit criterion
 
@@ -403,7 +413,7 @@ These are important, but they should not be mistaken for the net-new feature seq
 
 Net-new additions:
 
-1. **Source Match Report**
+1. **Reconcile, merge, deploy and production-check Source Match Report (PR #20)**
 2. **PoryGen MCP**
 3. **PoryGen CLI**
 4. **PoryGen Engine / corpus scale-up**

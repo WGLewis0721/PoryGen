@@ -68,6 +68,7 @@ JSON ScanResult
   source/license metadata
   review/dismiss
   exclusions/completeness
+  explicit empty/partial scan states
 \`\`\`
 
 No third-party LLM is in the runtime scan path.
@@ -137,6 +138,8 @@ Strong results require substantial structural overlap plus source-specific evide
 
 Weak/generic evidence becomes possible/common or abstention.
 
+A conventional one-line/common code pattern cannot become a strong attribution from normalized shape alone; PR #21 enforces that regression boundary in production. Multiple public sources may independently qualify when each has enough evidence. The Engine does not force a single winner.
+
 ## Corpus
 
 The offline source-index pipeline currently contains:
@@ -173,6 +176,17 @@ ZIP additionally enforces:
 - bounded worker deadline/concurrency.
 
 When coverage is incomplete, ScanResult reports that explicitly.
+
+### Empty and partial scan contract
+
+PR #21 makes coverage state part of the product contract rather than secondary UI copy:
+
+- zero eligible files return **No eligible source files were scanned**;
+- incomplete scans are labeled **Partial scan**;
+- unchecked-file counts/reasons are surfaced where available;
+- no-match language is scoped to files actually checked.
+
+This keeps abstention and coverage honest: a scan cannot imply originality or project-wide clearance when the Engine did not inspect the whole project.
 
 ## State and retention
 
@@ -216,7 +230,7 @@ Reuse those components when they fit later durable/connected features. Do not pu
 
 Net-new sequence:
 
-1. Source Match Report;
+1. reconcile, merge and deploy Source Match Report PR #20 (implemented, not production yet);
 2. PoryGen MCP;
 3. PoryGen CLI;
 4. larger scalable Engine/corpus retrieval;
