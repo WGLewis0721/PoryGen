@@ -1,0 +1,170 @@
+name: Founding 10 live PoryGen scan
+
+on:
+  push:
+    branches:
+      - test/founding-10-public-repos
+    paths:
+      - .github/workflows/founding-10-porygen-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Run 10 live scans
+        env:
+          SCAN_ENDPOINT: https://porygen.vercel.app/api/scan
+        run: |
+          node <<'NODE'
+          const { writeFileSync } = require('node:fs');
+
+          const repos = [
+            'PoryGen',
+            'apex',
+            'fundmatch',
+            'Studigo-ai',
+            'jobhound-ai',
+            'afoqt-coach-ai',
+            'itsm-tier1-agent',
+            'SIEM-copilot-',
+            'K8s-Ai-WGL',
+            'Ollama-WebUI-Log-Agent',
+          ];
+
+          const endpoint = process.env.SCAN_ENDPOINT;
+          const results = [];
+
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          function compactFinding(finding) {
+            return {
+              classification: finding?.classification ?? null,
+              customerPath: finding?.customer?.path ?? null,
+              customerLines: finding?.customer?.lines ?? null,
+              sourceRepository: finding?.publicSource?.repository ?? null,
+              sourcePath: finding?.publicSource?.path ?? null,
+              sourceLines: finding?.publicSource?.lines ?? null,
+              license: finding?.publicSource?.license ?? null,
+              sourceUrl: finding?.publicSource?.url ?? null,
+              contiguousTokens: finding?.metrics?.contiguousTokens ?? null,
+              matchedTokens: finding?.metrics?.matchedTokens ?? null,
+            };
+          }
+
+          for (const repo of repos) {
+            const repositoryUrl = `https://github.com/WGLewis0721/${repo}`;
+            let finalEntry = null;
+
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const started = Date.now();
+              try {
+                const response = await fetch(endpoint, {
+                  method: 'POST',
+                  headers: {
+                    'content-type': 'application/json',
+                    'user-agent': 'PoryGen-Founding-10-Test/1.0',
+                  },
+                  body: JSON.stringify({
+                    sourceType: 'github',
+                    repositoryUrl,
+                    exclusions: [],
+                    termsVersion: '2026-09-22-v1',
+                    termsAcceptedAt: new Date().toISOString(),
+                  }),
+                  signal: AbortSignal.timeout(60000),
+                });
+
+                const raw = await response.text();
+                let payload;
+                try { payload = JSON.parse(raw); }
+                catch { payload = { error: raw.slice(0, 1000) || 'Non-JSON response' }; }
+
+                const entry = {
+                  repo,
+                  repositoryUrl,
+                  httpStatus: response.status,
+                  attempt,
+                  requestElapsedMs: Date.now() - started,
+                  ok: response.ok,
+                  error: payload?.error ?? null,
+                  code: payload?.code ?? null,
+                  repository: payload?.repository ?? null,
+                  coverage: payload?.coverage ?? null,
+                  scan: payload?.scan ?? null,
+                  summary: payload?.summary ?? null,
+                  topFindings: Array.isArray(payload?.findings)
+                    ? payload.findings
+                        .filter((f) => f.classification === 'strong_match' || f.classification === 'possible_common_pattern')
+                        .slice(0, 5)
+                        .map(compactFinding)
+                    : [],
+                  fullPayload: payload,
+                };
+
+                if (response.ok || ![408, 429].includes(response.status) || attempt === 3) {
+                  finalEntry = entry;
+                  break;
+                }
+
+                await sleep(10000);
+              } catch (error) {
+                finalEntry = {
+                  repo,
+                  repositoryUrl,
+                  httpStatus: null,
+                  attempt,
+                  requestElapsedMs: Date.now() - started,
+                  ok: false,
+                  error: error instanceof Error ? error.message : String(error),
+                  code: 'CLIENT_EXCEPTION',
+                  repository: null,
+                  coverage: null,
+                  scan: null,
+                  summary: null,
+                  topFindings: [],
+                  fullPayload: null,
+                };
+                if (attempt < 3) await sleep(10000);
+              }
+            }
+
+            results.push(finalEntry);
+            const summaryLine = {
+              repo: finalEntry.repo,
+              status: finalEntry.httpStatus,
+              ok: finalEntry.ok,
+              code: finalEntry.code,
+              error: finalEntry.error,
+              fetchedFiles: finalEntry.scan?.fetchedFiles ?? null,
+              fetchedBytes: finalEntry.scan?.fetchedBytes ?? null,
+              partial: finalEntry.scan?.partial ?? null,
+              incompleteSupportedFiles: finalEntry.scan?.incompleteSupportedFiles ?? null,
+              elapsedMs: finalEntry.scan?.elapsedMs ?? finalEntry.requestElapsedMs,
+              strong: finalEntry.summary?.strong ?? null,
+              possible: finalEntry.summary?.possible ?? null,
+              insufficient: finalEntry.summary?.insufficient ?? null,
+              total: finalEntry.summary?.total ?? null,
+              topFindings: finalEntry.topFindings,
+            };
+            console.log('PORYGEN_RESULT ' + JSON.stringify(summaryLine));
+            await sleep(1500);
+          }
+
+          writeFileSync('founding-10-results.json', JSON.stringify(results, null, 2));
+
+          const passed = results.filter((r) => r.ok).length;
+          const failed = results.length - passed;
+          console.log('PORYGEN_TOTAL ' + JSON.stringify({ total: results.length, passed, failed }));
+          NODE
+
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: founding-10-results
+          path: founding-10-results.json
+          if-no-files-found: warn
