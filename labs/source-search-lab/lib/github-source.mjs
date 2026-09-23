@@ -90,6 +90,11 @@ async function githubJson(url, fetchImpl, timeoutMs) {
   return body;
 }
 
+export const GITHUB_REPOSITORY_STATE = Object.freeze({
+  REVISION_RESOLVED: "revision_resolved",
+  EMPTY_REPOSITORY: "empty_repository",
+});
+
 export const GITHUB_REVISION_KIND = Object.freeze({
   GIT_COMMIT: "git_commit",
   NONE: "none",
@@ -184,7 +189,7 @@ export async function fetchPublicGitHubRepository(repoUrl, {
     return {
       repository: fullName,
       repositoryUrl: `https://github.com/${fullName}`,
-      repositoryState: GITHUB_NO_REVISION_REASON.EMPTY_REPOSITORY,
+      repositoryState: GITHUB_REPOSITORY_STATE.EMPTY_REPOSITORY,
       revision,
       // Compatibility fields retained for the current scan/report contract.
       commit: "",
@@ -309,7 +314,7 @@ export async function fetchPublicGitHubRepository(repoUrl, {
   return {
     repository: fullName,
     repositoryUrl: `https://github.com/${fullName}`,
-    repositoryState: "revision_resolved",
+    repositoryState: GITHUB_REPOSITORY_STATE.REVISION_RESOLVED,
     revision: { ...revision, url: commitUrl },
     commit,
     commitUrl,
