@@ -61,31 +61,73 @@ async function githubRaw(url, fetchImpl, timeoutMs) {
   }
 }
 
-async function githubJson(url, fetchImpl, timeoutMs, { allowEmptyRepository = false } = {}) {
+function githubHttpError(response) {
+  const rateLimited = (response.status === 403 || response.status === 429) &&
+    response.headers?.get?.("x-ratelimit-remaining") === "0";
+  const hint = response.status === 404
+    ? "Repository or file was not found, or it is not public."
+    : rateLimited
+      ? "GitHub's rate limit for this server has been reached. Try again in a few minutes."
+      : `GitHub returned HTTP ${response.status}.`;
+  return new Error(hint);
+}
+
+async function githubJsonResponse(url, fetchImpl, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(url, { headers: headers(), signal: controller.signal, cache: "no-store" });
-    if (!response.ok) {
-      if (allowEmptyRepository && response.status === 409) {
-        const body = await response.json().catch(() => null);
-        // Only GitHub's explicit empty-repository response is a zero-file scan.
-        // Other conflicts and provider failures must remain failures.
-        if (body?.message === "Git Repository is empty.") return null;
-      }
-      const rateLimited = (response.status === 403 || response.status === 429) &&
-        response.headers?.get?.("x-ratelimit-remaining") === "0";
-      const hint = response.status === 404
-        ? "Repository or file was not found, or it is not public."
-        : rateLimited
-          ? "GitHub's rate limit for this server has been reached. Try again in a few minutes."
-          : `GitHub returned HTTP ${response.status}.`;
-      throw new Error(hint);
-    }
-    return await response.json();
+    const body = await response.json().catch(() => null);
+    return { response, body };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function githubJson(url, fetchImpl, timeoutMs) {
+  const { response, body } = await githubJsonResponse(url, fetchImpl, timeoutMs);
+  if (!response.ok) throw githubHttpError(response);
+  return body;
+}
+
+export const GITHUB_REVISION_KIND = Object.freeze({
+  GIT_COMMIT: "git_commit",
+  NONE: "none",
+});
+
+export const GITHUB_NO_REVISION_REASON = Object.freeze({
+  EMPTY_REPOSITORY: "empty_repository",
+});
+
+export function classifyGitHubCommitResolution(status, body) {
+  if (status === 409 && body?.message === "Git Repository is empty.") {
+    return { kind: GITHUB_REVISION_KIND.NONE, reason: GITHUB_NO_REVISION_REASON.EMPTY_REPOSITORY };
+  }
+  return null;
+}
+
+async function resolveGitHubRevision(base, defaultBranch, fetchImpl, timeoutMs) {
+  const { response, body } = await githubJsonResponse(
+    `${base}/commits/${encodeURIComponent(defaultBranch)}`,
+    fetchImpl,
+    timeoutMs,
+  );
+
+  if (!response.ok) {
+    const classified = classifyGitHubCommitResolution(response.status, body);
+    if (classified) return classified;
+    throw githubHttpError(response);
+  }
+
+  const sha = body?.sha;
+  const treeSha = body?.commit?.tree?.sha;
+  if (!sha || !treeSha) throw new Error("Could not resolve the repository commit.");
+
+  return {
+    kind: GITHUB_REVISION_KIND.GIT_COMMIT,
+    sha,
+    treeSha,
+  };
 }
 
 const AUXILIARY_PATH = /(^|\/)(tests?|__tests__|spec|specs|e2e|bench(mark)?s?|examples?|demos?|docs?|scripts?|tools?|\.github)(\/|$)|\.(test|spec|bench)\.[a-z]+$|(^|\/)(test_[^/]*|[^/]*_test)\.py$|(^|\/)(tests?|bench(mark)?s?|examples?)\.[a-z]+$|\.config\.[a-z]+$|(^|\/)(setup|conftest)\.py$/i;
@@ -136,16 +178,15 @@ export async function fetchPublicGitHubRepository(repoUrl, {
   const metadata = await githubJson(base, fetchImpl, remaining());
   if (metadata.private) throw new Error("Only public GitHub repositories can be scanned.");
 
-  const commitInfo = await githubJson(
-    `${base}/commits/${encodeURIComponent(metadata.default_branch)}`,
-    fetchImpl,
-    remaining(),
-    { allowEmptyRepository: true },
-  );
-  if (commitInfo === null) {
+  const revision = await resolveGitHubRevision(base, metadata.default_branch, fetchImpl, remaining());
+
+  if (revision.kind === GITHUB_REVISION_KIND.NONE) {
     return {
       repository: fullName,
       repositoryUrl: `https://github.com/${fullName}`,
+      repositoryState: GITHUB_NO_REVISION_REASON.EMPTY_REPOSITORY,
+      revision,
+      // Compatibility fields retained for the current scan/report contract.
       commit: "",
       commitUrl: null,
       defaultBranch: metadata.default_branch,
@@ -161,9 +202,9 @@ export async function fetchPublicGitHubRepository(repoUrl, {
       partial: false,
     };
   }
-  const commit = commitInfo.sha;
-  const treeSha = commitInfo.commit?.tree?.sha;
-  if (!commit || !treeSha) throw new Error("Could not resolve the repository commit.");
+
+  const commit = revision.sha;
+  const treeSha = revision.treeSha;
 
   const tree = await githubJson(`${base}/git/trees/${treeSha}?recursive=1`, fetchImpl, remaining());
   const skipped = [];
@@ -264,11 +305,14 @@ export async function fetchPublicGitHubRepository(repoUrl, {
     .reduce((sum, value) => sum + value, 0);
   const treeComplete = tree.truncated !== true;
 
+  const commitUrl = `https://github.com/${fullName}/commit/${commit}`;
   return {
     repository: fullName,
     repositoryUrl: `https://github.com/${fullName}`,
+    repositoryState: "revision_resolved",
+    revision: { ...revision, url: commitUrl },
     commit,
-    commitUrl: `https://github.com/${fullName}/commit/${commit}`,
+    commitUrl,
     defaultBranch: metadata.default_branch,
     files,
     stats: {
