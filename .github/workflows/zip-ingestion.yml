@@ -3,7 +3,7 @@ on:
   push:
     branches: [feature/zip-scan-ingestion]
   pull_request:
-    paths: ['api/scan.mjs', 'labs/source-search-lab/lib/**', 'scripts/test-zip-ingestion.mjs', 'package*.json', '.github/workflows/zip-ingestion.yml']
+    paths: ['api/scan.mjs', 'labs/source-search-lab/lib/**', 'src/features/publicScan/**', 'scripts/test-zip-ingestion.mjs', 'package*.json', '.github/workflows/zip-ingestion.yml']
 permissions:
   contents: read
 jobs:
@@ -18,4 +18,5 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run test:ingestion
+      - run: npx vitest run src/features/publicScan/scanRequest.test.ts src/features/publicScan/sourceMatchReport.test.ts
       - run: npm run build
