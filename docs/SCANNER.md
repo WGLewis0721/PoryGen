@@ -141,6 +141,17 @@ A clean result means no sufficiently specific match was found in the indexed sou
 
 The GitHub path validates public GitHub repository references, resolves the latest default-branch commit/tree, selects supported files and fetches source from approved GitHub hosts.
 
+Provider-specific HTTP behavior is normalized at the GitHub adapter boundary before downstream scan/report logic consumes it. A resolved source now carries an explicit tagged revision state:
+
+- `{ kind: "git_commit", sha, treeSha, url? }`
+- `{ kind: "none", reason: "empty_repository" }`
+
+GitHub's explicit HTTP 409 `Git Repository is empty.` response is the only commit-resolution conflict promoted to the known-empty state. Generic 409s, 404s, rate limits, malformed success bodies, provider failures and timeouts remain failures/unknown states. Unknown is never treated as known empty.
+
+For compatibility, existing `commit` and `commitUrl` fields remain present. New consumers should prefer the tagged revision state.
+
+See [GITHUB_INGESTION_CONTRACT.md](GITHUB_INGESTION_CONTRACT.md) for the state machine, invariants and test partitions.
+
 A server-side GITHUB_TOKEN may increase REST capacity.
 
 GitHub source is not executed or cloned for execution.
@@ -244,12 +255,14 @@ ZIP/folder ingestion has focused security/API tests, and the merged multi-input 
 
 PR #21 added focused regressions for conventional one-line false elevation, zero-file GitHub behavior and partial-scan wording. Final production smoke passed on Apex, the `itsm-tier1-agent` zero-file repository, and a partial PoryGen repository scan.
 
+PR #23 adds equivalence-class coverage around GitHub commit resolution: valid revision, explicit empty repository, unrelated 409, malformed successful commit payload, not-found and rate-limited provider states. The Source Match Report also verifies that known-empty repositories render an explicit no-revision statement rather than an invented commit.
+
 Do not turn routine product work into broad matcher benchmarking. Reopen matcher research when production evidence identifies a concrete accuracy issue.
 
 ## Next scanner work
 
-The **Source Match Report** is implemented in open PR #20 but is not merged/deployed. It is a local self-contained HTML export with browser Print/PDF support and no new persistence. Reconcile that PR with current main after PR #21 before shipping it.
+The **Source Match Report** is shipped as a local self-contained HTML export with browser Print/PDF support and no new hosted persistence.
 
-After the report lands, scanner access expands through MCP and CLI, followed by larger corpus retrieval and connected/continuous GitHub use.
+Finish the narrow PR #23 empty-repository hardening, then scanner access expands through MCP and CLI, followed by larger corpus retrieval and connected/continuous GitHub use.
 
 See [../ROADMAP.md](../ROADMAP.md).
