@@ -83,6 +83,52 @@ test("one scan automatically fetches, compares and returns an action-ready findi
   });
 });
 
+test("known-empty GitHub state survives the scan API contract without inventing a revision", async () => {
+  const repositoryFetcher = async (url) => ({
+    repository: "customer/empty",
+    repositoryUrl: url,
+    repositoryState: "empty_repository",
+    revision: { kind: "none", reason: "empty_repository" },
+    commit: "",
+    commitUrl: null,
+    defaultBranch: "main",
+    files: [],
+    stats: {
+      fetchedFiles: 0,
+      fetchedBytes: 0,
+      checkedFiles: [],
+      supportedFilesInTree: [],
+      treeComplete: true,
+      treeTruncated: false,
+      stoppedForLimit: false,
+      incompleteSupportedFiles: 0,
+      incompleteReasons: {},
+      skippedCount: 0,
+      elapsedMs: 1,
+    },
+    skipped: [],
+    partial: false,
+  });
+
+  await withServer({ referenceIndex, repositoryFetcher }, async (base) => {
+    const response = await fetch(`${base}/api/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repositoryUrl: "https://github.com/customer/empty" }),
+    });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.repository.state, "empty_repository");
+    assert.deepEqual(data.repository.revision, { kind: "none", reason: "empty_repository" });
+    assert.equal(data.repository.commit, "");
+    assert.equal(data.repository.commitUrl, null);
+    assert.deepEqual(data.scan.checkedFiles, []);
+    assert.equal(data.scan.treeComplete, true);
+    assert.equal(data.scan.partial, false);
+    assert.equal(data.summary.total, 0);
+  });
+});
+
 test("unrelated repository code can return insufficient evidence", async () => {
   const repositoryFetcher = async (url) => ({
     repository: "customer/unrelated",
