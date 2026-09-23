@@ -1,11 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchPublicGitHubRepository, parseGitHubRepositoryUrl } from "../lib/github-source.mjs";
+import {
+  GITHUB_NO_REVISION_REASON,
+  GITHUB_REPOSITORY_STATE,
+  GITHUB_REVISION_KIND,
+  classifyGitHubCommitResolution,
+  fetchPublicGitHubRepository,
+  parseGitHubRepositoryUrl,
+} from "../lib/github-source.mjs";
 
-function response(data, status = 200) {
+function response(data, status = 200, headers = {}) {
+  const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)]));
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: { get(name) { return normalized.get(String(name).toLowerCase()) ?? null; } },
     async json() { return data; },
     async text() { return data; },
   };
@@ -47,6 +56,13 @@ test("repository fetch resolves a commit and fetches supported blobs without exe
   };
 
   const fetched = await fetchPublicGitHubRepository("https://github.com/example/project", { fetchImpl });
+  assert.equal(fetched.repositoryState, GITHUB_REPOSITORY_STATE.REVISION_RESOLVED);
+  assert.deepEqual(fetched.revision, {
+    kind: GITHUB_REVISION_KIND.GIT_COMMIT,
+    sha: "abc123",
+    treeSha: "tree123",
+    url: "https://github.com/example/project/commit/abc123",
+  });
   assert.equal(fetched.commit, "abc123");
   assert.equal(fetched.files.length, 1);
   assert.equal(fetched.files[0].path, "src/a.js");
@@ -158,4 +174,67 @@ test("provider failure remains incomplete after skipped-detail list is full", as
   assert.equal(fetched.stats.incompleteReasons.provider_failure, 1);
   assert.deepEqual(fetched.stats.checkedFiles, []);
   assert.deepEqual(fetched.stats.supportedFilesInTree, ["src/fails.js"]);
+});
+
+test("GitHub commit-resolution classification only recognizes the documented empty-repository conflict", () => {
+  assert.deepEqual(classifyGitHubCommitResolution(409, { message: "Git Repository is empty." }), {
+    kind: GITHUB_REVISION_KIND.NONE,
+    reason: GITHUB_NO_REVISION_REASON.EMPTY_REPOSITORY,
+  });
+  assert.equal(classifyGitHubCommitResolution(409, { message: "Another conflict" }), null);
+  assert.equal(classifyGitHubCommitResolution(409, null), null);
+  assert.equal(classifyGitHubCommitResolution(404, { message: "Git Repository is empty." }), null);
+});
+
+test("a repository with no commits returns an explicit known-empty revision state", async () => {
+  const fetched = await fetchPublicGitHubRepository("https://github.com/example/empty", {
+    exclusions: ["starter"],
+    fetchImpl: async (url) => String(url).endsWith("/commits/main")
+      ? response({ message: "Git Repository is empty." }, 409)
+      : response({ private: false, default_branch: "main" }),
+  });
+  assert.equal(fetched.repositoryState, GITHUB_REPOSITORY_STATE.EMPTY_REPOSITORY);
+  assert.deepEqual(fetched.revision, {
+    kind: GITHUB_REVISION_KIND.NONE,
+    reason: GITHUB_NO_REVISION_REASON.EMPTY_REPOSITORY,
+  });
+  assert.equal(fetched.commit, "");
+  assert.equal(fetched.commitUrl, null);
+  assert.deepEqual(fetched.files, []);
+  assert.equal(fetched.stats.fetchedFiles, 0);
+  assert.equal(fetched.stats.treeComplete, true);
+  assert.equal(fetched.stats.incompleteSupportedFiles, 0);
+  assert.deepEqual(fetched.stats.incompleteReasons, {});
+  assert.deepEqual(fetched.stats.exclusions, ["starter"]);
+  assert.equal(fetched.partial, false);
+});
+
+test("an unrelated GitHub conflict remains unknown and is not promoted to known-empty", async () => {
+  await assert.rejects(fetchPublicGitHubRepository("https://github.com/example/conflict", {
+    fetchImpl: async (url) => String(url).endsWith("/commits/main")
+      ? response({ message: "Another conflict" }, 409)
+      : response({ private: false, default_branch: "main" }),
+  }), /GitHub returned HTTP 409/);
+});
+
+test("a malformed successful commit response is not converted into an empty repository", async () => {
+  await assert.rejects(fetchPublicGitHubRepository("https://github.com/example/malformed", {
+    fetchImpl: async (url) => String(url).endsWith("/commits/main")
+      ? response({ sha: "abc123" })
+      : response({ private: false, default_branch: "main" }),
+  }), /Could not resolve the repository commit/);
+});
+
+test("not-found and rate-limited commit resolution remain provider failures", async () => {
+  await assert.rejects(fetchPublicGitHubRepository("https://github.com/example/missing", {
+    fetchImpl: async (url) => String(url).endsWith("/commits/main")
+      ? response({ message: "Not Found" }, 404)
+      : response({ private: false, default_branch: "main" }),
+  }), /not found|not public/i);
+
+  await assert.rejects(fetchPublicGitHubRepository("https://github.com/example/limited", {
+    fetchImpl: async (url) => String(url).endsWith("/commits/main")
+      ? response({ message: "rate limit" }, 403, { "x-ratelimit-remaining": "0" })
+      : response({ private: false, default_branch: "main" }),
+  }), /rate limit/i);
 });

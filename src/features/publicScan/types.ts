@@ -34,6 +34,11 @@ export interface ScanResult {
     commit: string;
     commitUrl: string | null;
     defaultBranch: string | null;
+    /** Additive GitHub adapter state; uploads omit these fields. */
+    state?: "revision_resolved" | "empty_repository";
+    revision?:
+      | { kind: "git_commit"; sha: string; treeSha: string; url?: string }
+      | { kind: "none"; reason: "empty_repository" };
   };
   /** Present once the ZIP/folder contract is live. Older GitHub responses omit it. */
   source?: { type: "github" | "zip" | "files"; transient?: boolean };
