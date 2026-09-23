@@ -41,6 +41,8 @@ export function scanIngestedSource(fetched, referenceIndex, started = Date.now()
         commit: fetched.commit,
         commitUrl: fetched.commitUrl,
         defaultBranch: fetched.defaultBranch,
+        ...(fetched.repositoryState ? { state: fetched.repositoryState } : {}),
+        ...(fetched.revision ? { revision: fetched.revision } : {}),
       },
       coverage: referenceIndex.coverage,
       source: fetched.source ?? { type: 'github' },
