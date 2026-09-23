@@ -208,6 +208,33 @@ describe("structured errors and empty uploads", () => {
     expect(scanHeadline(empty, 0, 0).toLowerCase()).not.toContain("clean");
     expect(scanHeadline(empty, 0, 0)).not.toContain("No strong source match");
   });
+
+  it("does not describe a GitHub repository with zero eligible files as a clean scan", () => {
+    const empty = scan({
+      source: { type: "github" },
+      scan: { ...scan().scan, fetchedFiles: 0, checkedFiles: [], supportedFilesInTree: [] },
+      findings: [],
+      summary: { strong: 0, possible: 0, insufficient: 0, total: 0 },
+    });
+    expect(uploadHasNoEligibleFiles(empty)).toBe(true);
+    expect(scanHeadline(empty, 0, 0)).toBe("No eligible source files were scanned");
+    expect(scanHeadline(empty, 0, 0)).not.toContain("No strong source match");
+  });
+
+  it("scopes no-match language to checked files on a partial scan", () => {
+    const partial = scan({
+      scan: {
+        ...scan().scan,
+        fetchedFiles: 150,
+        partial: true,
+        incompleteSupportedFiles: 10,
+        incompleteReasons: { file_limit: 10 },
+      },
+      findings: [],
+      summary: { strong: 0, possible: 0, insufficient: 0, total: 0 },
+    });
+    expect(scanHeadline(partial, 0, 0)).toBe("Partial scan: 150 files checked. No strong source match in the files checked.");
+  });
 });
 
 describe("rescan resolution", () => {
