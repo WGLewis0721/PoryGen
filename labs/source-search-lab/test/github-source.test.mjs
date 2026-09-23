@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   GITHUB_NO_REVISION_REASON,
+  GITHUB_REPOSITORY_STATE,
   GITHUB_REVISION_KIND,
   classifyGitHubCommitResolution,
   fetchPublicGitHubRepository,
@@ -55,7 +56,7 @@ test("repository fetch resolves a commit and fetches supported blobs without exe
   };
 
   const fetched = await fetchPublicGitHubRepository("https://github.com/example/project", { fetchImpl });
-  assert.equal(fetched.repositoryState, "revision_resolved");
+  assert.equal(fetched.repositoryState, GITHUB_REPOSITORY_STATE.REVISION_RESOLVED);
   assert.deepEqual(fetched.revision, {
     kind: GITHUB_REVISION_KIND.GIT_COMMIT,
     sha: "abc123",
@@ -192,7 +193,7 @@ test("a repository with no commits returns an explicit known-empty revision stat
       ? response({ message: "Git Repository is empty." }, 409)
       : response({ private: false, default_branch: "main" }),
   });
-  assert.equal(fetched.repositoryState, GITHUB_NO_REVISION_REASON.EMPTY_REPOSITORY);
+  assert.equal(fetched.repositoryState, GITHUB_REPOSITORY_STATE.EMPTY_REPOSITORY);
   assert.deepEqual(fetched.revision, {
     kind: GITHUB_REVISION_KIND.NONE,
     reason: GITHUB_NO_REVISION_REASON.EMPTY_REPOSITORY,
