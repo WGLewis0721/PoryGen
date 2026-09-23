@@ -95,6 +95,8 @@ Strong findings require source-specific evidence in addition to normalized struc
 
 Current calibrated strong behavior includes the existing source-specific contiguous/rarity gate; do not loosen it casually.
 
+PR #21 adds an explicit regression guardrail: conventional one-line or broadly reused code patterns must not be promoted to `strong_match` from normalized/structural overlap alone. They require stronger source-specific lexical evidence. This is a production rule, not a benchmark-only preference.
+
 Outcomes:
 
 **Strong match**  
@@ -107,6 +109,15 @@ Meaningful similarity exists, but the evidence may be ordinary/common or insuffi
 Nothing is specific enough to justify naming a source.
 
 Multiple sources may independently qualify. The Engine does not force one winner.
+
+The Source Match contract carried forward from V2 is:
+
+1. use preserving and normalized representations to retrieve a bounded candidate set;
+2. verify candidates with ordered/contiguous evidence rather than a single similarity score;
+3. retain matched customer/source line ranges and pinned source metadata;
+4. distinguish strong evidence from possible/common-pattern evidence;
+5. abstain when specificity is insufficient;
+6. carry scan coverage/completeness into the customer result so a no-match result is scoped to what was actually checked.
 
 ## Corpus
 
@@ -194,6 +205,13 @@ See [ZIP_SCAN_API.md](ZIP_SCAN_API.md) for detailed limits/errors.
 
 Completeness accounting is separate from the capped visible skipped-file details.
 
+Production UI/result semantics after PR #21:
+
+- zero eligible source files: **No eligible source files were scanned**;
+- incomplete work: clearly label **Partial scan**;
+- where available, show unchecked-file counts and reasons;
+- no-match wording applies only to files actually checked and never implies the entire project was cleared.
+
 Reasons can include:
 
 - file too large;
@@ -224,12 +242,14 @@ The Engine has regression coverage for retrieval, reporting, completeness, resca
 
 ZIP/folder ingestion has focused security/API tests, and the merged multi-input release passed one real HTTP ZIP → ingestion → Engine → strong-match gate.
 
+PR #21 added focused regressions for conventional one-line false elevation, zero-file GitHub behavior and partial-scan wording. Final production smoke passed on Apex, the `itsm-tier1-agent` zero-file repository, and a partial PoryGen repository scan.
+
 Do not turn routine product work into broad matcher benchmarking. Reopen matcher research when production evidence identifies a concrete accuracy issue.
 
 ## Next scanner work
 
-The next customer-facing addition is **Source Match Report**.
+The **Source Match Report** is implemented in open PR #20 but is not merged/deployed. It is a local self-contained HTML export with browser Print/PDF support and no new persistence. Reconcile that PR with current main after PR #21 before shipping it.
 
-After that, scanner access expands through MCP and CLI, followed by larger corpus retrieval and connected/continuous GitHub use.
+After the report lands, scanner access expands through MCP and CLI, followed by larger corpus retrieval and connected/continuous GitHub use.
 
 See [../ROADMAP.md](../ROADMAP.md).
