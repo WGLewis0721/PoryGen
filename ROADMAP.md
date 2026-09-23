@@ -72,7 +72,8 @@ The product promise remains:
 - [x] Production ZIP/folder flow merged and deployed
 - [x] One real ZIP end-to-end gate exercised through HTTP → ingestion → existing Engine → real strong match
 - [x] Source Match Report merged in PR #20 at `117e4af`: self-contained HTML export with browser Print/PDF support and no new hosted persistence
-- [x] All-public-repository report smoke exercised 30 public repositories against production; 29 completed report downloads matched visible scan state, with one no-commit repository exposing a GitHub 409 edge case now fixed in open PR #23
+- [x] All-public-repository report smoke exercised 30 public repositories against production; 29 completed report downloads matched visible scan state and exposed one no-commit GitHub edge case
+- [x] PR #23 merged/deployed at `a051093`: explicit tagged GitHub revision state, known-empty vs unknown separation, no invented revision, equivalence-class tests and documented ingestion invariants
 
 ## Current scan bounds
 
@@ -409,14 +410,13 @@ These are important, but they should not be mistaken for the net-new feature seq
 
 Net-new additions:
 
-1. **Finish PR #23 no-commit repository hardening and deploy it**
-2. **PoryGen MCP**
-3. **PoryGen CLI**
-4. **PoryGen Engine / corpus scale-up**
-5. **Connected GitHub + continuous monitoring**
-6. **Larger-scan infrastructure as required by scale**
-7. **Monetization**
-8. **Teams / enterprise / distribution**
+1. **PoryGen MCP**
+2. **PoryGen CLI**
+3. **PoryGen Engine / corpus scale-up**
+4. **Connected GitHub + continuous monitoring**
+5. **Larger-scan infrastructure as required by scale**
+6. **Monetization**
+7. **Teams / enterprise / distribution**
 
 Parallel: continue endpoint/security/operational hardening without letting it redefine the product roadmap.
 

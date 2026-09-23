@@ -13,7 +13,7 @@
 9. `acef6da` / PR #22 — refreshed docs for the latest source-match production state.
 10. `117e4af` / PR #20 — merged the downloadable Source Match Report while preserving PR #21 regression behavior.
 
-Open PR #23 fixes the remaining no-commit GitHub repository edge case discovered during an all-public-repository report smoke. It is not production behavior until merged/deployed.
+PR #23 is merged and deployed at `a051093`. Empty GitHub repositories are now an explicit known-empty revision state rather than an ambiguous provider error.
 
 ## 2026-09-23 — Source Match Report shipped; all-public smoke exposed one edge case
 
@@ -21,7 +21,7 @@ PR #20 is merged at `117e4af`. The live scan flow now offers **Download Source M
 
 An all-public-repository production smoke covered 30 public WGLewis0721 repositories. Twenty-nine scans completed and their downloaded HTML reports were verified against the visible scan state. Three were partial scans and three were zero-file scans. One repository, `Obby-CyberTruck`, failed because it has no commits and GitHub returns an explicit 409 `Git Repository is empty.` response.
 
-Open PR #23 maps only that explicit empty-repository 409 into the existing honest zero-file scan path; unrelated 409 conflicts remain errors. Its focused GitHub/server tests, scan/report UI tests, production build and live adapter recheck pass. The PR is open and not production yet.
+PR #23 is now production. It maps only the exact empty-repository 409 into a known-empty state, keeps unrelated 409/404/rate-limit/malformed-success/provider failures as unknown/errors, propagates a tagged revision state through the API/report, and leaves matcher behavior unchanged. Final CI passed Source Search tests, live GitHub fixture, ingestion tests, public scan/report tests, build, and Vercel deployment.
 
 ## 2026-09-22 — regression hardening shipped
 
@@ -110,8 +110,8 @@ See [ROADMAP.md](ROADMAP.md).
 
 Net-new product order:
 
-1. Finish PR #23 no-commit repository hardening → merge → deploy → production smoke
-2. PoryGen MCP
+1. PoryGen MCP
+2. PoryGen CLI
 3. PoryGen CLI
 4. PoryGen Engine / corpus scale-up
 5. connected GitHub + continuous monitoring

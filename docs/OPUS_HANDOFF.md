@@ -54,7 +54,7 @@ PR #21 is also merged and live. It fixed the three founding-repository regressio
 
 PR #20 is merged at `117e4af` and the Source Match Report is live. It preserves PR #21's conventional-pattern demotion and explicit empty/partial scan behavior. The report is generated locally as a self-contained HTML artifact with browser Print/PDF support and no new hosted persistence.
 
-Open PR #23 is a narrow hardening follow-up discovered by scanning all 30 public WGLewis0721 repositories: a repository with no commits returns GitHub's explicit 409 `Git Repository is empty.` The PR maps only that response to the existing zero-file result, while generic 409 conflicts remain failures. It is tested and preview-deployed but is not production until merged.
+PR #23 is merged and deployed at `a051093`. It turns GitHub's exact empty-repository response into an explicit known-empty revision state, preserves all other ambiguous/provider failures as failures, carries that state through scan/report contracts, and documents the invariant that uncertainty cannot become a stronger PoryGen conclusion.
 
 ## Current important boundaries
 
@@ -71,11 +71,11 @@ Open PR #23 is a narrow hardening follow-up discovered by scanning all 30 public
 - no automatic push/PR checks;
 - no customer entitlement enforcement.
 
-## Current hardening before the next net-new product
+## Next net-new product
 
-**Finish PR #23 — no-commit repository handling**
+**PoryGen MCP**
 
-The all-public-repository report smoke verified 29 downloaded HTML reports against their visible production scan states and found one remaining GitHub adapter edge case: a repository with no commits. Merge/deploy PR #23 and production-smoke that case, then continue to the next net-new product.
+The GitHub provider boundary is now hardened enough that the next adapter surface should reuse the same Engine and explicit result semantics rather than introduce another matcher or hidden state model.
 
 The shipped report shows:
 
