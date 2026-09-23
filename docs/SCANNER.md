@@ -263,6 +263,6 @@ Do not turn routine product work into broad matcher benchmarking. Reopen matcher
 
 The **Source Match Report** is shipped as a local self-contained HTML export with browser Print/PDF support and no new hosted persistence.
 
-Finish the narrow PR #23 empty-repository hardening, then scanner access expands through MCP and CLI, followed by larger corpus retrieval and connected/continuous GitHub use.
+PR #23 empty-repository hardening is merged and deployed. Scanner access now expands through MCP and CLI, followed by larger corpus retrieval and connected/continuous GitHub use.
 
 See [../ROADMAP.md](../ROADMAP.md).
