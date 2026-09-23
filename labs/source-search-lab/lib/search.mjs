@@ -435,6 +435,32 @@ function specificTokens(preservingTokens) {
   return preservingTokens.filter((token) => token.kind.startsWith("id:") || token.kind.startsWith("lit:"));
 }
 
+function distinctiveKindsOnLines(tokens, range) {
+  if (!range) return new Set();
+  return new Set(tokens
+    .filter((token) => token.line >= range.start && token.line <= range.end)
+    .map((token) => token.kind)
+    .filter((kind) => {
+      if (kind.startsWith("id:")) return kind.slice(3).replace(/^#/, "").length >= 3;
+      if (kind.startsWith("lit:")) {
+        const value = kind.slice(4);
+        return /^["'`]/.test(value) && value.length >= 6;
+      }
+      return false;
+    }));
+}
+
+function hasDistinctiveSingleLineEvidence(queryTokens, candidateTokens, queryLines, candidateLines) {
+  if (!queryLines || !candidateLines || queryLines.start !== queryLines.end || candidateLines.start !== candidateLines.end) return true;
+  const queryKinds = distinctiveKindsOnLines(queryTokens, queryLines);
+  const candidateKinds = distinctiveKindsOnLines(candidateTokens, candidateLines);
+  let shared = 0;
+  for (const kind of queryKinds) {
+    if (candidateKinds.has(kind) && ++shared >= 2) return true;
+  }
+  return false;
+}
+
 export function verifyCandidate(region, candidate, document, settings = DEFAULT_SETTINGS) {
   const span = candidateSpan(candidate, document, settings);
   const candidateTokens = document.tokens.normalized.slice(span.start, span.end);
@@ -485,11 +511,20 @@ export function verifyCandidate(region, candidate, document, settings = DEFAULT_
         (settings.minRenamedCopyDistinctKinds ?? DEFAULT_SETTINGS.minRenamedCopyDistinctKinds));
 
   const lowCorpusCommonality = candidate.commonFingerprintRatio < settings.strongCommonFingerprintRatio;
+  // A long, exact-looking single-line punctuation pattern (for example a conventional
+  // UUID regex) can otherwise masquerade as source-specific evidence. Require shared,
+  // human-chosen lexical names/literals before attributing a one-line match strongly.
+  const distinctiveSingleLineEvidence = hasDistinctiveSingleLineEvidence(
+    queryPreservingTokens,
+    candidatePreservingTokens,
+    customerMatchLines,
+    sourceMatchLines,
+  );
 
   // Normalized structural similarity alone is never enough: a candidate only
   // earns "strong_match" when it also carries source-specific (preserving) evidence
   // and is not dominated by fingerprints that are common across the indexed corpus.
-  const strong = structuralEvidence && specificEvidence && lowCorpusCommonality;
+  const strong = structuralEvidence && specificEvidence && lowCorpusCommonality && distinctiveSingleLineEvidence;
 
   const possible =
     matchedTokens >= settings.possibleMatchedTokens &&
