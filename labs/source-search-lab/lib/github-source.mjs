@@ -61,12 +61,18 @@ async function githubRaw(url, fetchImpl, timeoutMs) {
   }
 }
 
-async function githubJson(url, fetchImpl, timeoutMs) {
+async function githubJson(url, fetchImpl, timeoutMs, { allowEmptyRepository = false } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(url, { headers: headers(), signal: controller.signal, cache: "no-store" });
     if (!response.ok) {
+      if (allowEmptyRepository && response.status === 409) {
+        const body = await response.json().catch(() => null);
+        // Only GitHub's explicit empty-repository response is a zero-file scan.
+        // Other conflicts and provider failures must remain failures.
+        if (body?.message === "Git Repository is empty.") return null;
+      }
       const rateLimited = (response.status === 403 || response.status === 429) &&
         response.headers?.get?.("x-ratelimit-remaining") === "0";
       const hint = response.status === 404
@@ -134,7 +140,27 @@ export async function fetchPublicGitHubRepository(repoUrl, {
     `${base}/commits/${encodeURIComponent(metadata.default_branch)}`,
     fetchImpl,
     remaining(),
+    { allowEmptyRepository: true },
   );
+  if (commitInfo === null) {
+    return {
+      repository: fullName,
+      repositoryUrl: `https://github.com/${fullName}`,
+      commit: "",
+      commitUrl: null,
+      defaultBranch: metadata.default_branch,
+      files: [],
+      stats: {
+        exclusions: rules, excludedFiles: 0,
+        fetchedFiles: 0, fetchedBytes: 0, checkedFiles: [], supportedFilesInTree: [],
+        treeComplete: true, treeTruncated: false, stoppedForLimit: false,
+        incompleteSupportedFiles: 0, incompleteReasons: {}, skippedCount: 0,
+        elapsedMs: Date.now() - started,
+      },
+      skipped: [],
+      partial: false,
+    };
+  }
   const commit = commitInfo.sha;
   const treeSha = commitInfo.commit?.tree?.sha;
   if (!commit || !treeSha) throw new Error("Could not resolve the repository commit.");

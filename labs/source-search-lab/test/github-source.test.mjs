@@ -159,3 +159,27 @@ test("provider failure remains incomplete after skipped-detail list is full", as
   assert.deepEqual(fetched.stats.checkedFiles, []);
   assert.deepEqual(fetched.stats.supportedFilesInTree, ["src/fails.js"]);
 });
+
+test("a repository with no commits returns an honest zero-file scan", async () => {
+  const fetched = await fetchPublicGitHubRepository("https://github.com/example/empty", {
+    exclusions: ["starter"],
+    fetchImpl: async (url) => String(url).endsWith("/commits/main")
+      ? response({ message: "Git Repository is empty." }, 409)
+      : response({ private: false, default_branch: "main" }),
+  });
+  assert.equal(fetched.commit, "");
+  assert.equal(fetched.commitUrl, null);
+  assert.deepEqual(fetched.files, []);
+  assert.equal(fetched.stats.fetchedFiles, 0);
+  assert.equal(fetched.stats.treeComplete, true);
+  assert.deepEqual(fetched.stats.exclusions, ["starter"]);
+  assert.equal(fetched.partial, false);
+});
+
+test("an unrelated GitHub conflict is not treated as an empty repository", async () => {
+  await assert.rejects(fetchPublicGitHubRepository("https://github.com/example/conflict", {
+    fetchImpl: async (url) => String(url).endsWith("/commits/main")
+      ? response({ message: "Another conflict" }, 409)
+      : response({ private: false, default_branch: "main" }),
+  }), /GitHub returned HTTP 409/);
+});
