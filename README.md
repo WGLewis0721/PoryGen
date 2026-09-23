@@ -28,6 +28,16 @@ All three paths feed the same PoryGen Engine and use the same strong / possible-
 
 A visitor can scan without creating an account.
 
+### Latest production hardening
+
+PR #21 hardened three behaviors found during founding-repository regression testing:
+
+- conventional one-line/common patterns do not become `strong_match` without stronger source-specific evidence;
+- a scan with zero eligible files clearly returns **No eligible source files were scanned**;
+- partial scans are unmistakably marked **Partial scan**, disclose unchecked-file counts/reasons when available, and scope no-match wording to files actually checked.
+
+The final production smoke pass was green on Apex, the `itsm-tier1-agent` zero-file case, and a partial PoryGen repository scan.
+
 ### Findings can include
 
 - affected customer file and matched lines;
@@ -133,9 +143,11 @@ No customer code is sent to a runtime LLM.
 
 **Source Match Report** is available after a completed public, ZIP, or folder scan. Choose **Download Source Match Report** for a self-contained HTML artifact; open it and print to PDF if needed. It includes source metadata, compact evidence, coverage, exclusions, and current review/dismissal decisions. Export runs locally without storing uploaded source on the server. The downloaded file contains excerpts; share it deliberately. See [report behavior](docs/SOURCE_MATCH_REPORT.md).
 
-The net-new sequence after that is:
+The report preserves PR #21’s conventional-pattern demotion and explicit empty/partial scan states.
 
-**Source Match Report → MCP → CLI → Engine/corpus scale-up → connected GitHub + continuous monitoring.**
+The next net-new sequence is:
+
+**MCP → CLI → Engine/corpus scale-up → connected GitHub + continuous monitoring.**
 
 Operational hardening continues in parallel.
 

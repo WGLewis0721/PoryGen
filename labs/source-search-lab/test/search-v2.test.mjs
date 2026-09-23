@@ -263,6 +263,21 @@ export function clamp(value, low, high) {
   assert.equal(findings.some((finding) => finding.classification === "strong_match"), false);
 });
 
+test("regression: conventional UUID regex is not promoted to a strong source match", () => {
+  const uuidRegex = `export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n`;
+  const uuidIndex = buildReferenceIndex([
+    { id: "uuid", repository: "uuid@14.0.2", commit: "1".repeat(40), path: "dist-node/regex.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/uuid", source: uuidRegex },
+    { id: "pad1", repository: "example/pad1", commit: "2".repeat(40), path: "pad1.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/pad1", source: "export function alphaWidget(value){ return value?.trim()?.toLowerCase() ?? null; }" },
+    { id: "pad2", repository: "example/pad2", commit: "3".repeat(40), path: "pad2.js", language: "javascript", license: "MIT", sourceUrl: "https://example.test/pad2", source: "export function betaWidget(items){ return items.filter(Boolean).map(String); }" },
+  ]);
+  const customer = `function isUuid(value) { return !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }\n`;
+  const { findings } = scanSourceFiles([{ path: "api.ts", language: "typescript", source: customer }], uuidIndex);
+
+  const match = findings.find((finding) => finding.publicSource?.path === "dist-node/regex.js");
+  assert.ok(match, "expected the conventional UUID regex to remain reviewable");
+  assert.notEqual(match.classification, "strong_match");
+});
+
 test("source absent from index yields insufficient evidence", () => {
   const unrelated = `
 export function triangular(n) {

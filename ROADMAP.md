@@ -56,6 +56,10 @@ The product promise remains:
 - [x] User-selected starter/template/boilerplate exclusions before matching
 - [x] Strong match / possible-common-pattern / abstention outcomes
 - [x] Source-specific evidence required for strong matches
+- [x] Conventional one-line/common patterns cannot become strong matches without stronger source-specific evidence (PR #21)
+- [x] Zero eligible files return an explicit **No eligible source files were scanned** state
+- [x] Partial scans visibly disclose incompleteness and scope no-match language to files actually checked
+- [x] Final PR #21 production smoke: Apex PASS; `itsm-tier1-agent` zero-file PASS; PoryGen partial-scan PASS
 - [x] Side-by-side excerpts and matched line ranges
 - [x] Public-source links and source/license metadata
 - [x] Developer-readable explanation of why a finding matched
@@ -403,7 +407,7 @@ These are important, but they should not be mistaken for the net-new feature seq
 
 Net-new additions:
 
-1. **Source Match Report**
+1. **Reconcile, merge, deploy and production-check Source Match Report (PR #20)**
 2. **PoryGen MCP**
 3. **PoryGen CLI**
 4. **PoryGen Engine / corpus scale-up**
