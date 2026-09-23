@@ -578,7 +578,9 @@ export function PublicScanPage() {
             <div className="notice">
               <strong>What this covers.</strong> {result.coverage.claim.replace(/^This lab searches/, "PoryGen currently searches")}{" "}
               {strong.length === 0
-                ? "No strong match means nothing sufficiently specific was found in those sources — not that the code is original."
+                ? result.scan.partial
+                  ? "For this partial scan, no strong match means nothing sufficiently specific was found in the files actually checked — not that the unchecked files or repository are clear."
+                  : "No strong match means nothing sufficiently specific was found in those sources — not that the code is original."
                 : "A match is evidence to review, not proof of copying. Open the source, check its license, then dismiss it or change the code and scan again."}
             </div>
           )}
@@ -595,11 +597,6 @@ export function PublicScanPage() {
             </div>
           )}
 
-          {!isPrivateUpload(result) && result.scan.fetchedFiles === 0 && (
-            <p className="notice notice-warn">
-              <strong>Nothing to compare.</strong> This repository has no JavaScript, TypeScript or Python files PoryGen can check yet.
-            </p>
-          )}
           {!isPrivateUpload(result) && result.scan.treeComplete === false && (
             <p className="notice notice-warn">
               <strong>Only part of this repository was checked.</strong> It is too large for GitHub to list in one
@@ -614,9 +611,14 @@ export function PublicScanPage() {
               Only the uploaded files were checked. A file that does not appear here was not proved deleted from the rest of the project.
             </p>
           )}
-          {incomplete.length > 0 && (
+          {result.scan.partial && !emptyUpload && (
             <p className="notice notice-warn">
-              <strong>Partial scan.</strong> Some supported files weren’t checked: {incomplete.join(", ")}.
+              <strong>Partial scan.</strong>{" "}
+              {result.scan.incompleteSupportedFiles > 0
+                ? `${result.scan.incompleteSupportedFiles.toLocaleString("en-US")} supported ${result.scan.incompleteSupportedFiles === 1 ? "file was" : "files were"} not checked`
+                : "Not every supported file was checked"}
+              {incomplete.length > 0 && ` (${incomplete.join(", ")})`}.
+              {strong.length === 0 && " No strong source match means only that none was found in the files checked."}
             </p>
           )}
           {rescanned && sameCommit && <p className="notice">No new commits since the last scan, so results are unchanged.</p>}
