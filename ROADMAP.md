@@ -127,7 +127,7 @@ A small pinned V2 reference set is also retained for documented fixtures/regress
 - production serves only a subset of the existing offline corpus;
 - GitHub review/dismiss history is browser-local;
 - uploaded-project results intentionally disappear when the page/session is gone;
-- Source Match Report exists in open PR #20 but is not yet merged/deployed; the current implementation is a local standalone HTML/printable export, not durable hosted sharing;
+- Source Match Report exports are local HTML snapshots; no hosted report history or private sharing yet;
 - no MCP server;
 - no CLI;
 - no GitHub App;
@@ -178,7 +178,7 @@ Delivered:
 
 ## Phase 2 — Source Match Report
 
-**Status: IN FLIGHT — IMPLEMENTED IN PR #20, NOT MERGED/DEPLOYED**
+**Status: IMPLEMENTED — downloadable HTML, printable to PDF**
 
 **Goal:** Turn one completed scan into a clean artifact that answers the source-match question without forcing someone to re-read the scan UI.
 
@@ -197,20 +197,14 @@ The name is **Source Match Report**, not “compliance report,” “originality
 - [x] side-by-side or compact evidence;
 - [x] exclusions;
 - [x] dismissed/reviewed findings and notes where available;
-- [ ] explicit limitations: indexed-source coverage, not proof of copying/originality, not legal advice.
+- [x] explicit limitations: indexed-source coverage, not proof of copying/originality, not legal advice.
 
 ### Privacy rules
 
 - [x] Do not persist uploaded source merely to create a report.
 - [x] Prefer a downloadable/exportable report first.
-- [x] If private sharing is later added, persist only what is deliberately required and make the retention boundary explicit.
+- [ ] If private sharing is later added, persist only what is deliberately required and make the retention boundary explicit.
 - [x] Do not call the output a certificate.
-
-### Implementation status
-
-PR #20 builds the report locally in the browser as a self-contained HTML file with browser Print/PDF support. It includes scope, completeness, exclusions, strong and possible findings, matched lines, pinned source/license/version metadata, compact evidence, current review/dismissal decisions and explicit limitations. The implementation adds no report API or hosted persistence.
-
-Focused report tests and the production build passed on the PR branch. Browser print/PDF output has not yet been visually verified. Because PR #21 landed afterward, PR #20 must be reconciled with current main before merge/deploy.
 
 ### Exit criterion
 

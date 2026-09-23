@@ -141,11 +141,11 @@ No customer code is sent to a runtime LLM.
 
 ## What is next
 
-The **Source Match Report** has been implemented in PR #20 as a local, self-contained HTML export with browser Print/PDF support, but it is **not merged or deployed yet**. It carries scan scope, completeness, exclusions, strong/possible findings, matched lines, pinned source/license/version evidence, current review decisions, and explicit limitations without adding report persistence.
+**Source Match Report** is available after a completed public, ZIP, or folder scan. Choose **Download Source Match Report** for a self-contained HTML artifact; open it and print to PDF if needed. It includes source metadata, compact evidence, coverage, exclusions, and current review/dismissal decisions. Export runs locally without storing uploaded source on the server. The downloaded file contains excerpts; share it deliberately. See [report behavior](docs/SOURCE_MATCH_REPORT.md).
 
-PR #20 must be reconciled with the current main branch after PR #21 before it can ship.
+The report preserves PR #21’s conventional-pattern demotion and explicit empty/partial scan states.
 
-After the report lands, the net-new sequence is:
+The next net-new sequence is:
 
 **MCP → CLI → Engine/corpus scale-up → connected GitHub + continuous monitoring.**
 

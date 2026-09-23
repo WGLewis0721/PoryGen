@@ -26,3 +26,10 @@ Public `/scan` ZIP and folder upload, consulted 2026-09-22. No matcher, corpus, 
 | https://developer.mozilla.org/en-US/docs/Web/API/File/webkitRelativePath | MDN / `File.webkitRelativePath` | Submitted folder paths are `webkitRelativePath` (the selected folder name is the first segment). Exclusions must match that path; ZIP roots are not stripped either. | `src/features/publicScan/scanRequest.ts` |
 | https://developer.mozilla.org/en-US/docs/Web/API/Window/btoa | MDN / `btoa()` | Canonical ZIP `archiveBase64` is standard base64 with `=` padding and no data-URL prefix. `btoa` rejects code points above 255, so bytes are encoded directly instead of being passed through a Unicode string. | `src/features/publicScan/scanRequest.ts` |
 | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array/toBase64 | MDN / `Uint8Array.prototype.toBase64()` | Where the method exists, call it with `{ alphabet: "base64", omitPadding: false }` so the payload matches Node’s canonical base64. Otherwise use the local encoder, which is tested against `Buffer.toString("base64")`. | `src/features/publicScan/scanRequest.ts` |
+
+## Source Match Report
+
+| URL | Owner / title | Decision informed | Affected files |
+| --- | --- | --- | --- |
+| https://developer.mozilla.org/en-US/docs/Web/API/Blob | MDN / Blob | Generate a self-contained HTML download locally from the completed result, without sending source to a report service. | `src/features/publicScan/sourceMatchReport.ts` |
+| https://developer.mozilla.org/en-US/docs/Web/API/URL/revokeObjectURL_static | MDN / URL.revokeObjectURL | Release the temporary object URL after allowing the browser to start the download. | `src/features/publicScan/sourceMatchReport.ts` |

@@ -28,19 +28,13 @@ import {
   whyItMatched,
   type ScanRequestBody,
 } from "./scanRequest";
+import { downloadSourceMatchReport, type ReportContext, type ScanDecision, type FolderSelection } from "./sourceMatchReport";
 import "./public-scan.css";
 
-type Decision = { status: "reviewing" | "dismissed"; reason?: string; at: string };
+type Decision = ScanDecision;
 type Decisions = Record<string, Decision>;
 type SourceMode = "github" | "zip" | "files";
-type FolderNote = {
-  sent: number;
-  excluded: number;
-  omittedDependencies: number;
-  omittedBinary: number;
-  omittedTooLarge: number;
-  trimmed: number;
-};
+type FolderNote = FolderSelection;
 
 const EXAMPLES = ["https://github.com/sindresorhus/yocto-queue", "https://github.com/sindresorhus/is-plain-obj"];
 
@@ -218,6 +212,7 @@ export function PublicScanPage() {
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [folderSummary, setFolderSummary] = useState<FolderNote | null>(null);
+  const [reportContext, setReportContext] = useState<ReportContext | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [previous, setPrevious] = useState<ScanResult | null>(null);
   const [rescanned, setRescanned] = useState(false);
@@ -228,7 +223,7 @@ export function PublicScanPage() {
   const lastRun = useRef("");
   const current = useRef<ScanResult | null>(null);
 
-  const execute = useCallback(async (body: ScanRequestBody, isRescan: boolean) => {
+  const execute = useCallback(async (body: ScanRequestBody, isRescan: boolean, reportInput?: { label: string; folder?: FolderSelection }) => {
     setBusy(true);
     setError("");
     if (!isRescan) setResult(null);
@@ -244,6 +239,7 @@ export function PublicScanPage() {
       const data = await response.json().catch(() => ({ error: "The scanner is unavailable right now. Try again shortly." }));
       if (!response.ok) throw new Error(formatScanFailure(data));
       const next = data as ScanResult;
+      setReportContext({ completedAt: new Date().toISOString(), label: reportInput?.label ?? next.repository.name, folder: reportInput?.folder });
       const requestedUpload = body.sourceType === "zip" || body.sourceType === "files";
       if (requestedUpload || isPrivateUpload(next)) {
         setPrevious(null);
@@ -315,7 +311,7 @@ export function PublicScanPage() {
       if (mode === "zip") {
         if (!zipFile) throw new ScanInputError("INVALID_ARCHIVE", "The upload is not a supported ZIP archive.");
         const request = buildZipScanRequest(new Uint8Array(await zipFile.arrayBuffer()), exclusionLines(exclusions), acceptance);
-        await execute(request, false);
+        await execute(request, false, { label: zipFile.name });
         return;
       }
       if (folderFiles.length === 0) throw new Error("Choose a project folder to scan.");
@@ -328,15 +324,16 @@ export function PublicScanPage() {
         exclusionLines(exclusions),
         acceptance,
       );
-      setFolderSummary({
+      const folderNote: FolderSelection = {
         sent: prepared.request.files.length,
         excluded: prepared.excluded,
         omittedDependencies: prepared.omittedDependencies,
         omittedBinary: prepared.omittedBinary,
         omittedTooLarge: prepared.omittedTooLarge,
         trimmed: prepared.trimmed,
-      });
-      await execute(prepared.request, false);
+      };
+      setFolderSummary(folderNote);
+      await execute(prepared.request, false, { label: selectionRoot(folderFiles.map(projectRelativePath)) || "Selected local files", folder: folderNote });
     } catch (caught) {
       if (caught instanceof ScanInputError) setError(scanInputFailure(caught));
       else setError(caught instanceof Error ? caught.message : "Scan failed.");
@@ -569,6 +566,15 @@ export function PublicScanPage() {
             {" · "}
             {(result.scan.elapsedMs / 1000).toFixed(1)}s{strong.length > 0 && ` · ${openCount} open`}
           </p>
+
+          {reportContext && (
+            <div className="ps-footer-actions">
+              <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => downloadSourceMatchReport(result, decisions, reportContext)}>
+                Download Source Match Report
+              </button>
+              <span className="hint">Offline HTML with current review decisions and code excerpts. Open it to print or save as PDF. Downloading saves a copy on your device; share it deliberately.</span>
+            </div>
+          )}
 
           {emptyUpload ? (
             <div className="notice notice-warn">
