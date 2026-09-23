@@ -45,6 +45,32 @@ describe("Source Match Report", () => {
     expect(doc.body.textContent).not.toContain("stale");
   });
 
+  it("renders a known empty GitHub repository as no revision rather than an invented commit", () => {
+    const result = reportFixture();
+    result.repository = {
+      name: "owner/empty",
+      url: "https://github.com/owner/empty",
+      commit: "",
+      commitUrl: null,
+      defaultBranch: "main",
+      state: "empty_repository",
+      revision: { kind: "none", reason: "empty_repository" },
+    };
+    result.scan.checkedFiles = [];
+    result.scan.fetchedFiles = 0;
+    result.scan.fetchedBytes = 0;
+    result.scan.supportedFilesInTree = [];
+    result.scan.treeComplete = true;
+    result.scan.partial = false;
+    result.findings = [];
+    result.summary = { strong: 0, possible: 0, insufficient: 0, total: 0 };
+
+    const text = parse(renderSourceMatchReport(result, {}, context)).body.textContent ?? "";
+    expect(text).toContain("No Git commit exists — repository is empty");
+    expect(text).toContain("No eligible files were checked");
+    expect(text).not.toContain("/commit/");
+  });
+
   it("keeps uploaded scope, client omissions and exclusion counts honest", () => {
     const result = reportFixture();
     result.source = { type: "files", transient: true };
