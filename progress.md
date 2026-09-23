@@ -1,5 +1,20 @@
 # Progress
 
+## Recent release train — latest 10 merged commits
+
+1. `5ccd65d` / PR #11 — recalibrated the strong-match gate at corpus scale and shipped the 1,000-file production corpus pack.
+2. `2031c0c` / PR #12 — capped customer-facing possible matches at 25 while preserving the true count.
+3. `e883d51` / PR #13 — added versioned clickwrap Terms and scan trust fixes.
+4. `0fd4baa` / PR #14 — fixed issues found in live user testing on the public scan flow.
+5. `612bb98` / PR #15 — refreshed project facts for the shipped corpus and current limits.
+6. `48c600e` / PR #16 — refreshed the roadmap around the current MVP and PoryGen Engine state.
+7. `ac5dfe7` / PR #17 — added transient ZIP/folder ingestion through the existing Engine.
+8. `188563f` / PR #18 — added ZIP/folder upload to the public scanner.
+9. `8fed6d7` / PR #19 — refreshed the documentation for the multi-input roadmap and architecture.
+10. `a80a94c` / PR #21 — fixed founding-repository source-match, zero-file, and partial-scan regressions and deployed them to production.
+
+PR #20 is intentionally not in that merged-commit list: it is the open Source Match Report implementation and is not production yet.
+
 ## 2026-09-22 — regression hardening shipped; Source Match Report in flight
 
 PR #21 is merged and deployed at commit `a80a94c` (including `6c6f372`). It closes the three founding-repository regressions found after the multi-input release:
