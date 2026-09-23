@@ -20,7 +20,7 @@ jobs:
           SCAN_ENDPOINT: https://porygen.vercel.app/api/scan
         run: |
           node <<'NODE'
-          const { writeFileSync } = require('node:fs');
+          const { writeFileSync } = await import('node:fs');
 
           const repos = [
             'PoryGen',
