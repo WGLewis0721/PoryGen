@@ -2,20 +2,28 @@
 
 ## Recent release train — latest 10 merged commits
 
-1. `5ccd65d` / PR #11 — recalibrated the strong-match gate at corpus scale and shipped the 1,000-file production corpus pack.
-2. `2031c0c` / PR #12 — capped customer-facing possible matches at 25 while preserving the true count.
-3. `e883d51` / PR #13 — added versioned clickwrap Terms and scan trust fixes.
-4. `0fd4baa` / PR #14 — fixed issues found in live user testing on the public scan flow.
-5. `612bb98` / PR #15 — refreshed project facts for the shipped corpus and current limits.
-6. `48c600e` / PR #16 — refreshed the roadmap around the current MVP and PoryGen Engine state.
-7. `ac5dfe7` / PR #17 — added transient ZIP/folder ingestion through the existing Engine.
-8. `188563f` / PR #18 — added ZIP/folder upload to the public scanner.
-9. `8fed6d7` / PR #19 — refreshed the documentation for the multi-input roadmap and architecture.
-10. `a80a94c` / PR #21 — fixed founding-repository source-match, zero-file, and partial-scan regressions and deployed them to production.
+1. `e883d51` / PR #13 — added versioned clickwrap Terms and scan trust fixes.
+2. `0fd4baa` / PR #14 — fixed issues found in live user testing on the public scan flow.
+3. `612bb98` / PR #15 — refreshed project facts for the shipped corpus and current limits.
+4. `48c600e` / PR #16 — refreshed the roadmap around the current MVP and PoryGen Engine state.
+5. `ac5dfe7` / PR #17 — added transient ZIP/folder ingestion through the existing Engine.
+6. `188563f` / PR #18 — added ZIP/folder upload to the public scanner.
+7. `8fed6d7` / PR #19 — refreshed documentation for the multi-input roadmap and architecture.
+8. `a80a94c` / PR #21 — fixed founding-repository source-match, zero-file and partial-scan regressions.
+9. `acef6da` / PR #22 — refreshed docs for the latest source-match production state.
+10. `117e4af` / PR #20 — merged the downloadable Source Match Report while preserving PR #21 regression behavior.
 
-PR #20 is intentionally not in that merged-commit list: it is the open Source Match Report implementation and is not production yet.
+Open PR #23 fixes the remaining no-commit GitHub repository edge case discovered during an all-public-repository report smoke. It is not production behavior until merged/deployed.
 
-## 2026-09-22 — regression hardening shipped; Source Match Report in flight
+## 2026-09-23 — Source Match Report shipped; all-public smoke exposed one edge case
+
+PR #20 is merged at `117e4af`. The live scan flow now offers **Download Source Match Report** after GitHub, ZIP, or folder scans. The report is a self-contained local HTML artifact with browser Print/PDF support, current review/dismissal state, coverage/completeness, exclusions, source metadata, matched lines and explicit limitations. It adds no hosted report persistence.
+
+An all-public-repository production smoke covered 30 public WGLewis0721 repositories. Twenty-nine scans completed and their downloaded HTML reports were verified against the visible scan state. Three were partial scans and three were zero-file scans. One repository, `Obby-CyberTruck`, failed because it has no commits and GitHub returns an explicit 409 `Git Repository is empty.` response.
+
+Open PR #23 maps only that explicit empty-repository 409 into the existing honest zero-file scan path; unrelated 409 conflicts remain errors. Its focused GitHub/server tests, scan/report UI tests, production build and live adapter recheck pass. The PR is open and not production yet.
+
+## 2026-09-22 — regression hardening shipped
 
 PR #21 is merged and deployed at commit `a80a94c` (including `6c6f372`). It closes the three founding-repository regressions found after the multi-input release:
 
@@ -28,8 +36,6 @@ Final production smoke:
 - Apex: **PASS**
 - `itsm-tier1-agent` zero-file repository: **PASS**
 - PoryGen partial repository: **PASS**
-
-PR #20 implements the Source Match Report as a self-contained local HTML export with Print/PDF support, coverage/completeness, exclusions, strong/possible findings, matched lines, pinned source/license/version metadata, compact evidence, review/dismissal state and explicit limitations. It is **open, not merged, and not deployed**; it must be reconciled with main after PR #21.
 
 ## 2026-09-22 — multi-input source scanning live
 
@@ -93,7 +99,7 @@ Production corpus pack:
 - only a subset of the offline corpus is served in production;
 - GitHub decisions are browser-local;
 - uploaded results intentionally are not durable;
-- Source Match Report is implemented in open PR #20 but is not production yet;
+- Source Match Report is live as a local HTML/Print-PDF export; hosted history/private sharing are not built;
 - no MCP or CLI;
 - no automatic push/PR scans;
 - no production customer entitlement enforcement.
@@ -104,7 +110,7 @@ See [ROADMAP.md](ROADMAP.md).
 
 Net-new product order:
 
-1. Finish Source Match Report PR #20: reconcile → merge → deploy → production smoke test
+1. Finish PR #23 no-commit repository hardening → merge → deploy → production smoke
 2. PoryGen MCP
 3. PoryGen CLI
 4. PoryGen Engine / corpus scale-up

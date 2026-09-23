@@ -40,7 +40,7 @@ The product promise remains:
 
 ---
 
-# Current baseline — September 22, 2026
+# Current baseline — September 23, 2026
 
 ## Shipped and working
 
@@ -71,6 +71,8 @@ The product promise remains:
 - [x] ZIP path-traversal, symlink/special-file, malformed archive, duplicate-path, expansion, entry-count, compression-ratio, worker-time and request-size protections
 - [x] Production ZIP/folder flow merged and deployed
 - [x] One real ZIP end-to-end gate exercised through HTTP → ingestion → existing Engine → real strong match
+- [x] Source Match Report merged in PR #20 at `117e4af`: self-contained HTML export with browser Print/PDF support and no new hosted persistence
+- [x] All-public-repository report smoke exercised 30 public repositories against production; 29 completed report downloads matched visible scan state, with one no-commit repository exposing a GitHub 409 edge case now fixed in open PR #23
 
 ## Current scan bounds
 
@@ -407,7 +409,7 @@ These are important, but they should not be mistaken for the net-new feature seq
 
 Net-new additions:
 
-1. **Reconcile, merge, deploy and production-check Source Match Report (PR #20)**
+1. **Finish PR #23 no-commit repository hardening and deploy it**
 2. **PoryGen MCP**
 3. **PoryGen CLI**
 4. **PoryGen Engine / corpus scale-up**
@@ -432,11 +434,11 @@ Completed:
 
 > **GitHub / ZIP / local folder → same PoryGen Engine → source evidence.**
 
-Next:
+Completed:
 
 > **Scan → Source Match Report.**
 
-Then:
+Next:
 
 > **Write / copy / generate → agent or CLI asks PoryGen → source evidence before the code moves on.**
 

@@ -1,5 +1,7 @@
 # Source Match Report
 
+**Production status:** shipped in PR #20 at commit `117e4af`.
+
 After a completed `/scan`, choose **Download Source Match Report**. The browser
 creates a standalone HTML file. Open it offline, or use the browser Print menu
 and Save as PDF. There is no report API, hosted sharing, or new storage.
@@ -29,3 +31,5 @@ unchanged. The report is editable and unsigned, not an originality certificate
 or legal advice.
 
 Checks: `npx vitest run src/features/publicScan` and `npm run build`.
+
+A production smoke across all 30 public WGLewis0721 repositories verified 29 actual HTML downloads against their visible scan states. The remaining repository has no commits and exposed a GitHub 409 adapter edge case; the narrow fix is in open PR #23 and is not production until merged.
