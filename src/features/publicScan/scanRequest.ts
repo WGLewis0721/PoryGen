@@ -407,17 +407,22 @@ export function findingNextAction(finding: Finding): string {
 }
 
 export function uploadHasNoEligibleFiles(result: ScanResult): boolean {
-  return isPrivateUpload(result) && (result.scan.ingestion?.empty === true || result.scan.fetchedFiles === 0);
+  return result.scan.fetchedFiles === 0 || (isPrivateUpload(result) && result.scan.ingestion?.empty === true);
 }
 
 export function scanHeadline(result: ScanResult, strongCount: number, openCount: number): string {
   if (uploadHasNoEligibleFiles(result)) return "No eligible source files were scanned";
   const checked = `${result.scan.fetchedFiles} ${result.scan.fetchedFiles === 1 ? "file" : "files"} checked. `;
-  if (strongCount === 0) return `${checked}No strong source match.`;
-  if (openCount === 0) {
-    return `${checked}${strongCount} strong source ${strongCount === 1 ? "match" : "matches"}, all dismissed.`;
+  const prefix = result.scan.partial ? "Partial scan: " : "";
+  if (strongCount === 0) {
+    return result.scan.partial
+      ? `${prefix}${checked}No strong source match in the files checked.`
+      : `${checked}No strong source match.`;
   }
-  return `${checked}${strongCount} strong source ${strongCount === 1 ? "match" : "matches"} to review.`;
+  if (openCount === 0) {
+    return `${prefix}${checked}${strongCount} strong source ${strongCount === 1 ? "match" : "matches"}, all dismissed.`;
+  }
+  return `${prefix}${checked}${strongCount} strong source ${strongCount === 1 ? "match" : "matches"} to review.`;
 }
 
 /**
