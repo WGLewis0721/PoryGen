@@ -459,3 +459,42 @@ PoryGen is succeeding when a developer can say:
 > “I gave PoryGen my code, it showed me what meaningfully resembled public source and where it may have come from, and I could inspect the evidence.”
 
 The business succeeds if that core source-discovery value is strong enough that developers later choose reports, agent/CLI integration, larger coverage, continuous monitoring, history, collaboration, and other paid capabilities.
+
+---
+
+# Production + commercial readiness gate — September 30, 2026
+
+PoryGen is currently a web developer SaaS. **App Store distribution is not required to sell it.** The commercial gate is a trustworthy paid scan/integration service with explicit coverage/privacy boundaries. Native Apple distribution is optional later if a real local-development workflow justifies it.
+
+## P0 — production hardening before paid access
+- [ ] Complete rate limiting/abuse protection and production observability for scan failures, latency, provider/GitHub quota, corpus/index load failures, ZIP rejection reasons, and serverless timeouts.
+- [ ] Publish the canonical Privacy Policy/data-handling statement with exact transient-source, report, log, telemetry, retention, deletion, and subprocessors boundaries.
+- [ ] Complete secret hygiene/rotation and repository privacy review before shipping materially deeper proprietary Engine logic.
+- [ ] Add production security acceptance for malicious archives/files, resource exhaustion, request smuggling/content-type edge cases, unauthorized report/history access once accounts exist, and dependency/supply-chain scanning.
+- [ ] Establish SLOs/support runbooks for failed scans, partial scans, provider outage, corpus/index rollback, bad release, and customer dispute over a finding.
+- [ ] Preserve conservative strong-match/abstention semantics and run the regression/benchmark suite before any ranking/reporting change.
+- [ ] Move larger scans to the queued worker path before paid limits promise workloads that can exceed the current synchronous bounds.
+- [ ] Define versioned Engine/corpus metadata in customer-visible results so support can reproduce what a paid scan actually evaluated.
+
+## P0 — identity, paid value, and billing
+- [ ] Define the first paid unit and packaging. Do not sell vague “credits”; tie payment to customer value such as deeper/larger scans, private repo monitoring, retained history/reports, or team/API/CLI capacity.
+- [ ] Add accounts/workspaces only to the extent needed for paid entitlement, retained history, private GitHub connection, and support/audit.
+- [ ] Use APEX for canonical entitlements/usage authorization and Stripe for web money movement; keep scan authorization server-side.
+- [ ] Implement checkout → verified payment → APEX entitlement → PoryGen feature/limit authorization.
+- [ ] Add billing/account UI for plan/allowance, usage, upgrade/manage/cancel, failed-payment state, and retention consequences.
+- [ ] Prove purchase, replay/idempotency, upgrade/downgrade, cancellation, refund/revocation, and reconciliation in test mode.
+- [ ] Run a bounded paid pilot and reconcile the first live transactions, entitlements, scan usage, and support records before general availability.
+
+## P1 — product capabilities that make a paid plan defensible
+- [ ] Finish CLI and/or MCP so paid value exists in the developer's normal workflow.
+- [ ] Expand the served corpus beyond the current bundled subset using a dedicated retrieval/index layer.
+- [ ] Implement connected private GitHub + persistent findings/history when this is part of the launch plan.
+- [ ] Add async scan progress/recovery for larger repositories.
+- [ ] Add team/workspace roles and audit controls only when the selected paid plan needs them.
+
+## Optional Apple distribution
+- [ ] Do not build an iOS App Store wrapper solely to say PoryGen is in the App Store; repository/CLI/CI workflows are the primary product surface.
+- [ ] If a future macOS developer companion is validated, use notarized/macOS distribution and/or the Mac App Store as appropriate, preserve the hosted Engine/entitlement boundary, and use Apple's commerce rules for digital access sold inside an App Store build.
+
+**Paid-production exit:** a customer can pay, receive a clearly defined scan/integration entitlement exactly once, submit private code under documented handling rules, receive reproducible evidence with honest coverage limits, cancel/refund cleanly, and get support from observable/auditable production systems.
+
