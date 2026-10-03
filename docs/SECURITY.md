@@ -76,6 +76,18 @@ ZIP/folder source, excerpts and complete upload scan results must not be written
 
 A future Source Match Report must not weaken this boundary merely for convenience. If private sharing later requires persistence, retention must be deliberate and disclosed.
 
+## Waitlist contact data
+
+POST /api/waitlist is the one anonymous endpoint that deliberately persists visitor data: the contact fields a person submits (email, optional name/company/role/team size/use case/source) plus a consent version, appended to a Google Sheet by a server-side service account.
+
+- GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY are server-side only; the service account reaches only the spreadsheet explicitly shared with it.
+- No IP address, user agent, scan source or scan results are stored with a signup.
+- Explicit consent is required; duplicate and new emails get the same response.
+- Cells are written RAW and formula-prefixed text is escaped.
+- Same-origin check, 8 KB body cap, honeypot and a best-effort per-instance IP rate limit; add a Vercel Firewall rule for a durable limit.
+
+The contract and setup are in [WAITLIST_API.md](WAITLIST_API.md).
+
 ## Source reference corpus
 
 Reference source is prepared independently of customer requests.

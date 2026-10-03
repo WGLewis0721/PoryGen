@@ -12,10 +12,11 @@
     "vercel-build": "node packages/source-index/hydrate.mjs && npm run build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run && npm --prefix labs/source-search-lab test && npm --prefix packages/source-index test",
+    "test": "vitest run && npm --prefix labs/source-search-lab test && npm --prefix packages/source-index test && npm run test:waitlist",
     "index:build": "node packages/source-index/cli.mjs build",
     "test:deployment": "node --test scripts/deployment-smoke.mjs",
     "test:ingestion": "node --test scripts/test-zip-ingestion.mjs",
+    "test:waitlist": "node --test scripts/test-waitlist.mjs",
     "test:watch": "vitest",
     "seed": "tsx scripts/seed-lattice.ts"
   },
