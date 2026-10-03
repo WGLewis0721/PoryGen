@@ -1,0 +1,17 @@
+name: Waitlist API
+on:
+  pull_request:
+    paths: ['api/waitlist.mjs', 'api/_lib/**', 'scripts/test-waitlist.mjs', '.github/workflows/waitlist.yml']
+permissions:
+  contents: read
+jobs:
+  waitlist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # Built-ins only; no install needed.
+      - run: npm run test:waitlist
