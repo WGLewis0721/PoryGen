@@ -189,6 +189,7 @@ The production endpoint is api/scan.mjs. Stable source matching remains in the e
 - [docs/SCANNER.md](docs/SCANNER.md) — matching, ingestion, coverage and limits
 - [docs/ZIP_SCAN_API.md](docs/ZIP_SCAN_API.md) — ZIP/folder API contract and security bounds
 - [docs/SECURITY.md](docs/SECURITY.md) — scan boundary, secrets and retention
+- [docs/WAITLIST_API.md](docs/WAITLIST_API.md) — beta waitlist API contract and Google Sheets setup
 - [docs/DEMO_FLOW.md](docs/DEMO_FLOW.md) — live customer flows
 - [docs/OPUS_HANDOFF.md](docs/OPUS_HANDOFF.md) — current implementation handoff
 - [IMPLEMENTATION_SOURCES.md](IMPLEMENTATION_SOURCES.md) — external implementation references
