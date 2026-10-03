@@ -6,7 +6,7 @@ import { WAITLIST_CONSENT_VERSION } from "./waitlist.mjs";
 
 /** Every product's signups alert this inbox unless WAITLIST_NOTIFY_EMAIL overrides it. */
 export const DEFAULT_NOTIFY_EMAIL = "graymattertechllc@gmail.com";
-const TIMEOUT_MS = 8_000;
+const TIMEOUT_MS = 4_000;
 
 export class NotifyError extends Error {
   constructor(message, status) { super(message); this.name = "NotifyError"; this.status = status; }

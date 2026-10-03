@@ -51,8 +51,8 @@ Errors share the scanner's shape — `{ error, code, retryable, field? }`. `erro
 | 413 | `REQUEST_TOO_LARGE` | — | no | Body over 8 KB. |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | — | no | Send `application/json`. |
 | 429 | `RATE_LIMITED` | — | yes | Too many attempts from one IP; honour `Retry-After` (seconds). |
-| 502 | `WAITLIST_STORAGE_FAILED` | — | yes | Saving failed: the Google Sheets call, or (with no sheet configured) the email alert. |
-| 503 | `WAITLIST_UNAVAILABLE` | — | yes | Neither the sheet nor email alerts are configured (alerts turned off and no Google env vars). |
+| 502 | `WAITLIST_STORAGE_FAILED` | — | yes | Saving to the Google Sheet failed. |
+| 503 | `WAITLIST_UNAVAILABLE` | — | yes | The Google Sheet isn't configured on this deployment. Success is never reported without a saved row. |
 | 500 | `WAITLIST_FAILED` | — | yes | Unexpected error. |
 
 Suggested UI: disable the button while the request is in flight; on `ok` show a thank-you state; on a `field` error mark that input; on `retryable` show the message with a retry action.
@@ -69,7 +69,7 @@ submitted_at | email | name | consent_version | status
 - `consent_version` is `WAITLIST_CONSENT_VERSION` in `api/_lib/waitlist.mjs`. Bump it when the consent wording changes.
 - `status` starts as `waitlisted`. Change it by hand (e.g. `invited`, `active`, `unsubscribed`) as you work through beta invites; the API never rewrites existing rows.
 - Values are written with `valueInputOption=RAW`, and anything starting with `= + - @` gets a leading `'`, so submitted text can't run as a formula in Sheets or in a CSV/Excel export.
-- Duplicate check: column B is read before each append. Two simultaneous submits of the same new email can both land; this is rare and harmless.
+- Duplicate check: column B is read before each append, and a same-email submission arriving while one is being saved joins that save, so double clicks store one row and cost one read. Addresses starting with `=`, `+`, `-` or `'` are refused (legal but practically unused), so stored emails are always verbatim and match exactly. Google Sheets has no unique constraint, so two server instances receiving the same new email at the same instant can still both append; rare and harmless.
 
 ## Email alerts
 
@@ -119,7 +119,7 @@ curl -sS -X POST https://porygen.vercel.app/api/waitlist \
   -d '{"email":"you@example.com","consent":true,"source":"setup-check"}'
 ```
 
-Expect `{"ok":true,"status":"joined"}` and a new row. A `503 WAITLIST_UNAVAILABLE` means a Google env var is missing (and server alerts are off); a `502` usually means the sheet isn't shared with the service account, `WAITLIST_SHEET_TAB` names a tab that doesn't exist, or the Sheets API isn't enabled (the Vercel function log shows the Google HTTP status).
+Expect `{"ok":true,"status":"joined"}` and a new row. A `503 WAITLIST_UNAVAILABLE` means a Google env var is missing; a `502` usually means the sheet isn't shared with the service account, `WAITLIST_SHEET_TAB` names a tab that doesn't exist, or the Sheets API isn't enabled (the Vercel function log shows the Google HTTP status).
 
 Local dev: `vite` doesn't serve `/api`. Run `vercel dev` with the env vars in `.env.local`, or point the form at a preview deployment and add the local origin to `WAITLIST_ALLOWED_ORIGINS`.
 

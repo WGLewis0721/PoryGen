@@ -244,13 +244,46 @@ test('with a sheet, a failed alert is logged and the signup still succeeds', asy
   assert.equal(errors.length, 1);
 });
 
-test('email-only: the alert is the record, so its failure is a retryable 502', async () => {
+test('without the sheet, a configured alert does not make a signup succeed', async () => {
   const ok = recordingNotifier();
-  assert.equal((await call(createWaitlistHandler({ store: null, notifier: ok.notifier, log: quiet }), valid)).statusCode, 200);
-  assert.equal(ok.sent.length, 1);
-  const res = await call(createWaitlistHandler({ store: null, notifier: recordingNotifier(true).notifier, log: quiet }), valid);
-  assert.equal(res.statusCode, 502);
-  assert.equal(res.payload.retryable, true);
+  const res = await call(createWaitlistHandler({ store: null, notifier: ok.notifier, log: quiet }), valid);
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.payload.code, 'WAITLIST_UNAVAILABLE');
+  assert.equal(ok.sent.length, 0);
+});
+
+test('simultaneous submissions of one new email store a single row', async () => {
+  const rows = [];
+  const wait = () => new Promise(resolve => setTimeout(resolve, 20));
+  const slow = { hasEmail: async email => { await wait(); return rows.some(row => row[1] === email); }, appendRow: async row => { await wait(); rows.push(row); } };
+  const { sent, notifier } = recordingNotifier();
+  const handler = createWaitlistHandler({ store: slow, notifier, log: quiet });
+  const results = await Promise.all([call(handler, valid), call(handler, valid), call(handler, { ...valid, email: 'ADA@example.com' })]);
+  assert.deepEqual(results.map(r => r.statusCode), [200, 200, 200]);
+  assert.equal(rows.length, 1);
+  assert.equal(sent.length, 1);
+});
+
+test('a same-email burst shares one sheet read instead of queueing one per request', async () => {
+  let reads = 0;
+  const rows = [];
+  const slow = { hasEmail: async email => { reads++; await new Promise(r => setTimeout(r, 20)); return rows.some(row => row[1] === email); }, appendRow: async row => { rows.push(row); } };
+  const handler = createWaitlistHandler({ store: slow, log: quiet });
+  await Promise.all(Array.from({ length: 8 }, () => call(handler, valid)));
+  assert.equal(reads, 1);
+  assert.equal(rows.length, 1);
+});
+
+test('emails starting with a formula character or apostrophe are refused, so stored emails stay verbatim', async () => {
+  const { store, handler } = make();
+  for (const email of ['+tag@example.com', '-x@example.com', '=cmd@example.com', "'foo@example.com"]) {
+    const res = await call(handler, { email });
+    assert.equal(res.statusCode, 400, email);
+    assert.equal(res.payload.code, 'INVALID_EMAIL');
+  }
+  assert.equal(store.rows.length, 0);
+  await call(handler, { email: 'user+tag@example.com' });
+  assert.equal(store.rows[0][1], 'user+tag@example.com');
 });
 
 test('honeypot and invalid submissions never send an alert', async () => {
