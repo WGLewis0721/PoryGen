@@ -1,6 +1,6 @@
 # Waitlist API
 
-`POST /api/waitlist` collects beta-tester/interest signups. Each new signup is appended as a row in a Google Sheet and emailed as an alert to **graymattertechllc@gmail.com** through FormSubmit, the same relay the Gray Matter site's contact form uses. It is separate from the scanner and never gates `/scan`: the waitlist is for people who want to hear about the beta, not a signup wall.
+`POST /api/waitlist` collects beta-tester/interest signups. Each new signup (name and email) is appended as a row in a Google Sheet; the form then emails an alert to **graymattertechllc@gmail.com** through FormSubmit (see *Email alerts*). It is separate from the scanner and never gates `/scan`: the waitlist is for people who want to hear about the beta, not a signup wall.
 
 Implementation: `api/waitlist.mjs` (wiring), `api/_lib/waitlist.mjs` (validation, abuse controls), `api/_lib/google-sheets.mjs` (service-account Sheets client, no SDK), `api/_lib/formsubmit.mjs` (email alert). Tests: `npm run test:waitlist`.
 
@@ -73,19 +73,33 @@ submitted_at | email | name | consent_version | status
 
 ## Email alerts
 
-Every **new** signup (not repeats, honeypot hits or invalid submissions) sends one email to `graymattertechllc@gmail.com`:
+Each signup is also emailed to **graymattertechllc@gmail.com** through FormSubmit, the relay the Gray Matter site's contact form already uses. **The browser sends the alert, not the server:** FormSubmit's Cloudflare protection rejects requests from Vercel's servers (HTTP 403), while browser requests go through, exactly as on the Gray Matter site. After `/api/waitlist` answers `ok`, the form fires this and never waits on it:
 
-- Subject: `[PoryGen] New beta waitlist signup: <email>`, with the name, email and time in a table.
-- Reply-To is the person's address, so replying from Gmail reaches them directly.
-- Sent server-side to `https://formsubmit.co/ajax/<address>`, identified by the stable site URL `https://porygen.vercel.app/`.
-- With the sheet configured, the sheet is the record and a failed alert is only logged. Without the sheet, the email is the record and a failed alert returns 502.
-- `WAITLIST_NOTIFY_EMAIL` overrides the address (or takes FormSubmit's random alias after activation); `off` disables alerts.
+```ts
+if (result.ok) {
+  fetch('https://formsubmit.co/ajax/graymattertechllc@gmail.com', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      _subject: `[PoryGen] New beta waitlist signup: ${email}`,
+      _template: 'table',
+      _captcha: 'false',
+      _replyto: email, // replying from Gmail reaches the person
+      product: 'PoryGen',
+      name,
+      email,
+    }),
+  }).catch(() => {}); // the signup is already saved; never block or fail the form on the alert
+}
+```
 
-**One-time activation:** FormSubmit holds the first message for a new form and emails an **Activate Form** link to the inbox. Click it once for PoryGen; that first signup is still saved in the sheet, but its alert is not re-sent. After activating, FormSubmit offers a random alias you can put in `WAITLIST_NOTIFY_EMAIL` so the address isn't in requests.
+- The sheet is the record; the alert is a convenience. A blocked or failed alert loses nothing.
+- **One-time activation:** FormSubmit holds the first message from a new site and emails an **Activate Form** link to the inbox. Click it once for `porygen.vercel.app`.
+- The server-side alert (`api/_lib/formsubmit.mjs`) stays available but is switched off with `WAITLIST_NOTIFY_EMAIL=off` in the Vercel env vars.
 
 ## Setup (one time)
 
-Email alerts need no setup beyond the activation click above. The sheet needs the steps below.
+The service account `waitlist@waitlist-graymattertechllc.iam.gserviceaccount.com` is set up and the Vercel env vars are set; these steps are for reference or a rebuild.
 
 
 1. **Google Cloud project** → APIs & Services → enable **Google Sheets API**.
@@ -96,7 +110,7 @@ Email alerts need no setup beyond the activation click above. The sheet needs th
    - `GOOGLE_SERVICE_ACCOUNT_EMAIL` = `client_email` from the JSON
    - `GOOGLE_PRIVATE_KEY` = `private_key` from the JSON (as-is, with its `\n` sequences)
    - `WAITLIST_SPREADSHEET_ID` = the ID between `/d/` and `/edit` in the sheet URL
-   - optional `WAITLIST_NOTIFY_EMAIL` (default `graymattertechllc@gmail.com`, a FormSubmit alias, or `off`), `WAITLIST_SHEET_TAB`, `WAITLIST_ALLOWED_ORIGINS` (comma-separated, e.g. `http://localhost:5173` for local dev against a deployed API)
+   - `WAITLIST_NOTIFY_EMAIL=off` (the browser sends alerts); optional `WAITLIST_SHEET_TAB`, `WAITLIST_ALLOWED_ORIGINS` (comma-separated, e.g. `http://localhost:5173` for local dev against a deployed API)
 6. Redeploy, then check:
 
 ```sh
@@ -105,7 +119,7 @@ curl -sS -X POST https://porygen.vercel.app/api/waitlist \
   -d '{"email":"you@example.com","consent":true,"source":"setup-check"}'
 ```
 
-Expect `{"ok":true,"status":"joined"}`, a new row, and an alert email (or, the very first time, FormSubmit's activation email). A `503 WAITLIST_UNAVAILABLE` means alerts are off and a Google env var is missing; a `502` usually means the sheet isn't shared with the service account, `WAITLIST_SHEET_TAB` names a tab that doesn't exist, or the Sheets API isn't enabled (the Vercel function log shows the Google HTTP status).
+Expect `{"ok":true,"status":"joined"}` and a new row. A `503 WAITLIST_UNAVAILABLE` means a Google env var is missing (and server alerts are off); a `502` usually means the sheet isn't shared with the service account, `WAITLIST_SHEET_TAB` names a tab that doesn't exist, or the Sheets API isn't enabled (the Vercel function log shows the Google HTTP status).
 
 Local dev: `vite` doesn't serve `/api`. Run `vercel dev` with the env vars in `.env.local`, or point the form at a preview deployment and add the local origin to `WAITLIST_ALLOWED_ORIGINS`.
 
@@ -119,4 +133,4 @@ Local dev: `vite` doesn't serve `/api`. Run `vercel dev` with the env vars in `.
 
 ## Privacy
 
-Unlike scan source, waitlist contact details **are deliberately stored** in the Google Sheet and sent by email through FormSubmit to the Gray Matter Gmail inbox (Google and FormSubmit are subprocessors). No IP address, user agent or scan data goes into the row. Mention the waitlist in the planned Privacy Policy, and honour removal requests by deleting the row.
+Unlike scan source, waitlist contact details **are deliberately stored** in the Google Sheet and emailed from the visitor's browser through FormSubmit to the Gray Matter Gmail inbox (Google and FormSubmit are subprocessors). No IP address, user agent or scan data goes into the row. Mention the waitlist in the planned Privacy Policy, and honour removal requests by deleting the row.
