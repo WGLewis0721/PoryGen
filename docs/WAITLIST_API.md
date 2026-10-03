@@ -102,7 +102,7 @@ Email alerts need no setup beyond the activation click above. The sheet needs th
 
 1. **Google Cloud project** → APIs & Services → enable **Google Sheets API**.
 2. IAM & Admin → Service Accounts → **Create service account** (no roles needed) → Keys → **Add key → JSON**. Keep the file private; don't commit it.
-3. **Spreadsheet:** **PoryGen Beta Waitlist** already exists, with the header row, in the owner's Drive folder *Beta Waitlists* (next to the Studigo, APEX, FundMatch and Spread sheets). One service account serves all five products.
+3. **Spreadsheet:** **PoryGen Beta Waitlist** already exists, with the header row, in *Gray Matter LLC › 03 - Sales & Clients › Beta Waitlists* (next to the Studigo, APEX, FundMatch and Spread sheets). One service account serves all five products.
 4. **Share the *Beta Waitlists* folder** with the service account's `client_email` as **Editor**. Every sheet inside inherits access, and the service account can't see anything else in your Drive.
 5. In **Vercel → Project → Settings → Environment Variables** (Production and Preview), set:
    - `GOOGLE_SERVICE_ACCOUNT_EMAIL` = `client_email` from the JSON
