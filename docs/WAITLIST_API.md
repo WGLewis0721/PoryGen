@@ -87,8 +87,8 @@ submitted_at | email | name | company | role | team_size | use_case | source | c
 
 1. **Google Cloud project** → APIs & Services → enable **Google Sheets API**.
 2. IAM & Admin → Service Accounts → **Create service account** (no roles needed) → Keys → **Add key → JSON**. Keep the file private; don't commit it.
-3. **Create the spreadsheet** in Google Drive with the header row above in row 1 of the first tab. (Already done: **PoryGen Beta Waitlist** in the owner's Drive.)
-4. **Share** the spreadsheet with the service account's `client_email` as **Editor**. Sheets access works through this share only, so the service account can't see anything else in your Drive.
+3. **Spreadsheet:** **PoryGen Beta Waitlist** already exists, with the header row, in the owner's Drive folder *Beta Waitlists* (next to the Studigo, APEX, FundMatch and Spread sheets). One service account serves all five products.
+4. **Share the *Beta Waitlists* folder** with the service account's `client_email` as **Editor**. Every sheet inside inherits access, and the service account can't see anything else in your Drive.
 5. In **Vercel → Project → Settings → Environment Variables** (Production and Preview), set:
    - `GOOGLE_SERVICE_ACCOUNT_EMAIL` = `client_email` from the JSON
    - `GOOGLE_PRIVATE_KEY` = `private_key` from the JSON (as-is, with its `\n` sequences)
