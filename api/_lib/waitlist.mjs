@@ -78,6 +78,23 @@ const errorPayload = error => ({
 });
 
 export function createWaitlistHandler({ store, notifier = null, rateLimit = createRateLimiter(), allowedOrigins = [], now = () => new Date(), log = console }) {
+  // Same-email submissions take turns within this instance (double clicks,
+  // retries), so the read-then-append below cannot interleave for one address.
+  // Sheets has no unique constraint, so two instances can still race; rare.
+  const inFlight = new Map();
+  const saveOnce = (entry, submittedAt) => {
+    const previous = inFlight.get(entry.email) ?? Promise.resolve(false);
+    const run = previous.catch(() => false).then(async () => {
+      if (await store.hasEmail(entry.email)) return false;
+      await store.appendRow(toRow(entry, submittedAt));
+      return true;
+    });
+    inFlight.set(entry.email, run);
+    const cleanup = () => { if (inFlight.get(entry.email) === run) inFlight.delete(entry.email); };
+    run.then(cleanup, cleanup);
+    return run;
+  };
+
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -99,29 +116,21 @@ export function createWaitlistHandler({ store, notifier = null, rateLimit = crea
       // normal-looking success and nothing is stored.
       if (typeof body?.website === "string" && body.website.trim()) return res.status(200).json({ ok: true, status: "joined" });
       const entry = validateSubmission(body);
-      if (!store && !notifier) throw new WaitlistError("WAITLIST_UNAVAILABLE", "The waitlist is not open yet. Try again later.", 503, { retryable: true });
+      // Success always means a durable sheet row; without the sheet, refuse.
+      if (!store) throw new WaitlistError("WAITLIST_UNAVAILABLE", "The waitlist is not open yet. Try again later.", 503, { retryable: true });
       const submittedAt = now().toISOString();
-      const storageFailed = (what, error) => {
-        log.error?.(what, error?.status ?? "", error?.message ?? error);
-        return new WaitlistError("WAITLIST_STORAGE_FAILED", "We couldn't save your signup. Try again in a moment.", 502, { retryable: true });
-      };
-      // The sheet is the record; the email is an alert. With a sheet, a failed
-      // alert is logged and the signup still succeeds. Without one, the email
-      // is the only record, so its failure is the request's failure.
-      let isNew = true;
-      if (store) {
-        try {
-          isNew = !(await store.hasEmail(entry.email));
-          if (isNew) await store.appendRow(toRow(entry, submittedAt));
-        } catch (error) {
-          throw storageFailed("waitlist storage failed", error);
-        }
+      let isNew;
+      try {
+        isNew = await saveOnce(entry, submittedAt);
+      } catch (error) {
+        log.error?.("waitlist storage failed", error?.status ?? "", error?.message ?? error);
+        throw new WaitlistError("WAITLIST_STORAGE_FAILED", "We couldn't save your signup. Try again in a moment.", 502, { retryable: true });
       }
+      // The alert is best-effort and only follows a saved row.
       if (notifier && isNew) {
         try {
           await notifier.notify(entry, submittedAt);
         } catch (error) {
-          if (!store) throw storageFailed("waitlist notification failed", error);
           log.error?.("waitlist notification failed (signup saved)", error?.message ?? error);
         }
       }

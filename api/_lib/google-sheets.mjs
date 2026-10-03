@@ -5,7 +5,9 @@ import { createSign } from "node:crypto";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SHEETS_URL = "https://sheets.googleapis.com/v4/spreadsheets";
 const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
-const TIMEOUT_MS = 8_000;
+// Per call. A cold signup makes three Sheets calls, so keep the total well
+// inside the 30 s function limit.
+const TIMEOUT_MS = 4_000;
 
 export class SheetsError extends Error {
   constructor(message, status) { super(message); this.name = "SheetsError"; this.status = status; }
@@ -60,7 +62,8 @@ export function createSheetsStore({ clientEmail, privateKey, spreadsheetId, tab 
     async hasEmail(email) {
       const url = `${SHEETS_URL}/${encodeURIComponent(spreadsheetId)}/values/${range(tab, "B2:B")}?majorDimension=COLUMNS`;
       const json = await call(url, await authed({ method: "GET" }), "Sheets read");
-      return (json.values?.[0] ?? []).some(cell => String(cell).trim().toLowerCase() === email);
+      // toRow may have prefixed an apostrophe (formula guard); RAW stores it literally.
+      return (json.values?.[0] ?? []).some(cell => String(cell).trim().replace(/^'/, "").toLowerCase() === email);
     },
     async appendRow(row) {
       // RAW stores every value as typed text, so nothing is evaluated as a formula.

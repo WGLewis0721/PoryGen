@@ -244,13 +244,32 @@ test('with a sheet, a failed alert is logged and the signup still succeeds', asy
   assert.equal(errors.length, 1);
 });
 
-test('email-only: the alert is the record, so its failure is a retryable 502', async () => {
+test('without the sheet, a configured alert does not make a signup succeed', async () => {
   const ok = recordingNotifier();
-  assert.equal((await call(createWaitlistHandler({ store: null, notifier: ok.notifier, log: quiet }), valid)).statusCode, 200);
-  assert.equal(ok.sent.length, 1);
-  const res = await call(createWaitlistHandler({ store: null, notifier: recordingNotifier(true).notifier, log: quiet }), valid);
-  assert.equal(res.statusCode, 502);
-  assert.equal(res.payload.retryable, true);
+  const res = await call(createWaitlistHandler({ store: null, notifier: ok.notifier, log: quiet }), valid);
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.payload.code, 'WAITLIST_UNAVAILABLE');
+  assert.equal(ok.sent.length, 0);
+});
+
+test('simultaneous submissions of one new email store a single row', async () => {
+  const rows = [];
+  const wait = () => new Promise(resolve => setTimeout(resolve, 20));
+  const slow = { hasEmail: async email => { await wait(); return rows.some(row => row[1] === email); }, appendRow: async row => { await wait(); rows.push(row); } };
+  const { sent, notifier } = recordingNotifier();
+  const handler = createWaitlistHandler({ store: slow, notifier, log: quiet });
+  const results = await Promise.all([call(handler, valid), call(handler, valid), call(handler, { ...valid, email: 'ADA@example.com' })]);
+  assert.deepEqual(results.map(r => r.statusCode), [200, 200, 200]);
+  assert.equal(rows.length, 1);
+  assert.equal(sent.length, 1);
+});
+
+test('emails stored with the formula-guard apostrophe still count as duplicates', async () => {
+  const { store, handler } = make();
+  await call(handler, { email: '+tag@example.com' });
+  assert.equal(store.rows[0][1], "'+tag@example.com");
+  const sheets = createSheetsStore({ clientEmail: 'bot@x', privateKey: pem, spreadsheetId: 's', fetch: fakeGoogle({ emails: ["'+tag@example.com"] }).fetch });
+  assert.equal(await sheets.hasEmail('+tag@example.com'), true);
 });
 
 test('honeypot and invalid submissions never send an alert', async () => {
