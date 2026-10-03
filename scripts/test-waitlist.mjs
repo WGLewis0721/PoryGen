@@ -4,7 +4,7 @@ import { createVerify, generateKeyPairSync } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { createSheetsStore, signServiceAccountJwt, normalizePrivateKey } from '../api/_lib/google-sheets.mjs';
 import { createWaitlistHandler, createRateLimiter, validateSubmission, toRow, cell, SHEET_HEADERS, WAITLIST_CONSENT_VERSION } from '../api/_lib/waitlist.mjs';
-import deployedHandler from '../api/waitlist.mjs';
+import { createFormSubmitNotifier } from '../api/_lib/formsubmit.mjs';
 
 const valid = { email: '  Ada@Example.COM ', name: 'Ada', company: 'Analytical', role: 'Engineer', teamSize: '2-10', useCase: 'Check AI output', source: 'landing', consent: true };
 
@@ -138,6 +138,9 @@ test('unconfigured storage is a retryable 503, storage failure a retryable 502',
 });
 
 test('deployed handler without Google env vars answers 503, not a crash', async () => {
+  // Alerts off so the test never emails the real inbox; the module reads env at import.
+  process.env.WAITLIST_NOTIFY_EMAIL = 'off';
+  const { default: deployedHandler } = await import('../api/waitlist.mjs');
   const res = await call(deployedHandler, { email: 'env@example.com', consent: true });
   assert.equal(res.statusCode, 503);
 });
@@ -215,4 +218,74 @@ test('end to end: handler + Sheets store against a fake Google', async () => {
   assert.equal(res.statusCode, 200);
   const row = JSON.parse(google.calls.at(-1).init.body).values[0];
   assert.equal(row[1], 'ada@example.com');
+});
+
+// --- Email alert (FormSubmit) -------------------------------------------------
+
+function recordingNotifier(fail = false) {
+  const sent = [];
+  return { sent, notifier: { notify: async (entry, submittedAt) => { if (fail) throw new Error('relay down'); sent.push({ email: entry.email, submittedAt }); } } };
+}
+
+test('a new signup is saved, then alerted once; a repeat signup is not alerted again', async () => {
+  const { sent, notifier } = recordingNotifier();
+  const { store, handler } = make({ notifier });
+  await call(handler, valid);
+  await call(handler, { ...valid, email: 'ADA@example.com' });
+  assert.equal(store.rows.length, 1);
+  assert.deepEqual(sent, [{ email: 'ada@example.com', submittedAt: '2026-10-03T12:00:00.000Z' }]);
+});
+
+test('with a sheet, a failed alert is logged and the signup still succeeds', async () => {
+  const errors = [];
+  const { store, handler } = make({ notifier: recordingNotifier(true).notifier, log: { error: (...args) => errors.push(args) } });
+  assert.equal((await call(handler, valid)).statusCode, 200);
+  assert.equal(store.rows.length, 1);
+  assert.equal(errors.length, 1);
+});
+
+test('email-only: the alert is the record, so its failure is a retryable 502', async () => {
+  const ok = recordingNotifier();
+  assert.equal((await call(createWaitlistHandler({ store: null, notifier: ok.notifier, log: quiet }), valid)).statusCode, 200);
+  assert.equal(ok.sent.length, 1);
+  const res = await call(createWaitlistHandler({ store: null, notifier: recordingNotifier(true).notifier, log: quiet }), valid);
+  assert.equal(res.statusCode, 502);
+  assert.equal(res.payload.retryable, true);
+});
+
+test('honeypot and invalid submissions never send an alert', async () => {
+  const { sent, notifier } = recordingNotifier();
+  const { handler } = make({ notifier });
+  await call(handler, { ...valid, website: 'spam' });
+  await call(handler, { email: 'bad', consent: true });
+  assert.equal(sent.length, 0);
+});
+
+function fakeFormSubmit({ status = 200, body = { success: 'true', message: 'The form was submitted successfully.' } } = {}) {
+  const calls = [];
+  return { calls, fetch: async (url, init) => { calls.push({ url, init }); return { ok: status < 400, status, json: async () => body }; } };
+}
+
+test('FormSubmit alert: endpoint, headers, subject, reply-to and fields', async () => {
+  const relay = fakeFormSubmit();
+  const notifier = createFormSubmitNotifier({ to: 'graymattertechllc@gmail.com', product: 'PoryGen', siteUrl: 'https://porygen.vercel.app/', fetch: relay.fetch });
+  await notifier.notify(validateSubmission({ ...valid, name: '=SUM(1)' }), '2026-10-03T12:00:00.000Z');
+  const [{ url, init }] = relay.calls;
+  assert.equal(url, 'https://formsubmit.co/ajax/graymattertechllc%40gmail.com');
+  assert.equal(init.headers.referer, 'https://porygen.vercel.app/');
+  assert.equal(init.headers.origin, 'https://porygen.vercel.app');
+  assert.equal(init.headers.accept, 'application/json');
+  const body = JSON.parse(init.body);
+  assert.equal(body._subject, '[PoryGen] New beta waitlist signup: ada@example.com');
+  assert.equal(body._replyto, 'ada@example.com');
+  assert.equal(body.name, '=SUM(1)');
+  assert.equal(body.consent_version, WAITLIST_CONSENT_VERSION);
+});
+
+test('FormSubmit alert rejects unconfirmed delivery, including the activation reply', async () => {
+  const entry = validateSubmission(valid);
+  const pending = createFormSubmitNotifier({ to: 'o@example.com', product: 'P', siteUrl: 'https://p.example/', fetch: fakeFormSubmit({ body: { success: 'false', message: 'This form needs Activation.' } }).fetch });
+  await assert.rejects(pending.notify(entry, 't'), error => /needs Activation/.test(error.message));
+  const down = createFormSubmitNotifier({ to: 'o@example.com', product: 'P', siteUrl: 'https://p.example/', fetch: fakeFormSubmit({ status: 500, body: {} }).fetch });
+  await assert.rejects(down.notify(entry, 't'), error => error.name === 'NotifyError' && error.status === 500);
 });

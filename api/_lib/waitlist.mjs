@@ -87,7 +87,7 @@ const errorPayload = error => ({
   error: error.message, code: error.code, retryable: Boolean(error.retryable), ...(error.field ? { field: error.field } : {}),
 });
 
-export function createWaitlistHandler({ store, rateLimit = createRateLimiter(), allowedOrigins = [], now = () => new Date(), log = console }) {
+export function createWaitlistHandler({ store, notifier = null, rateLimit = createRateLimiter(), allowedOrigins = [], now = () => new Date(), log = console }) {
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -109,12 +109,31 @@ export function createWaitlistHandler({ store, rateLimit = createRateLimiter(), 
       // normal-looking success and nothing is stored.
       if (typeof body?.website === "string" && body.website.trim()) return res.status(200).json({ ok: true, status: "joined" });
       const entry = validateSubmission(body);
-      if (!store) throw new WaitlistError("WAITLIST_UNAVAILABLE", "The waitlist is not open yet. Try again later.", 503, { retryable: true });
-      try {
-        if (!(await store.hasEmail(entry.email))) await store.appendRow(toRow(entry, now().toISOString()));
-      } catch (error) {
-        log.error?.("waitlist storage failed", error?.status ?? "", error?.message ?? error);
-        throw new WaitlistError("WAITLIST_STORAGE_FAILED", "We couldn't save your signup. Try again in a moment.", 502, { retryable: true });
+      if (!store && !notifier) throw new WaitlistError("WAITLIST_UNAVAILABLE", "The waitlist is not open yet. Try again later.", 503, { retryable: true });
+      const submittedAt = now().toISOString();
+      const storageFailed = (what, error) => {
+        log.error?.(what, error?.status ?? "", error?.message ?? error);
+        return new WaitlistError("WAITLIST_STORAGE_FAILED", "We couldn't save your signup. Try again in a moment.", 502, { retryable: true });
+      };
+      // The sheet is the record; the email is an alert. With a sheet, a failed
+      // alert is logged and the signup still succeeds. Without one, the email
+      // is the only record, so its failure is the request's failure.
+      let isNew = true;
+      if (store) {
+        try {
+          isNew = !(await store.hasEmail(entry.email));
+          if (isNew) await store.appendRow(toRow(entry, submittedAt));
+        } catch (error) {
+          throw storageFailed("waitlist storage failed", error);
+        }
+      }
+      if (notifier && isNew) {
+        try {
+          await notifier.notify(entry, submittedAt);
+        } catch (error) {
+          if (!store) throw storageFailed("waitlist notification failed", error);
+          log.error?.("waitlist notification failed (signup saved)", error?.message ?? error);
+        }
       }
       // Identical response for new and existing emails, so the endpoint can't be
       // used to check who has signed up.

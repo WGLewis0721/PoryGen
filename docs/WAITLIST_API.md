@@ -1,8 +1,8 @@
 # Waitlist API
 
-`POST /api/waitlist` collects beta-tester/interest signups and appends each one as a row in a Google Sheet. It is separate from the scanner and never gates `/scan`: the waitlist is for people who want to hear about the beta, not a signup wall.
+`POST /api/waitlist` collects beta-tester/interest signups. Each new signup is appended as a row in a Google Sheet and emailed as an alert to **graymattertechllc@gmail.com** through FormSubmit, the same relay the Gray Matter site's contact form uses. It is separate from the scanner and never gates `/scan`: the waitlist is for people who want to hear about the beta, not a signup wall.
 
-Implementation: `api/waitlist.mjs` (wiring), `api/_lib/waitlist.mjs` (validation, abuse controls), `api/_lib/google-sheets.mjs` (service-account Sheets client, no SDK). Tests: `npm run test:waitlist`.
+Implementation: `api/waitlist.mjs` (wiring), `api/_lib/waitlist.mjs` (validation, abuse controls), `api/_lib/google-sheets.mjs` (service-account Sheets client, no SDK), `api/_lib/formsubmit.mjs` (email alert). Tests: `npm run test:waitlist`.
 
 ## Frontend contract
 
@@ -63,8 +63,8 @@ Errors share the scanner's shape — `{ error, code, retryable, field? }`. `erro
 | 413 | `REQUEST_TOO_LARGE` | — | no | Body over 8 KB. |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | — | no | Send `application/json`. |
 | 429 | `RATE_LIMITED` | — | yes | Too many attempts from one IP; honour `Retry-After` (seconds). |
-| 502 | `WAITLIST_STORAGE_FAILED` | — | yes | Google Sheets call failed. |
-| 503 | `WAITLIST_UNAVAILABLE` | — | yes | Google env vars aren't configured on this deployment. |
+| 502 | `WAITLIST_STORAGE_FAILED` | — | yes | Saving failed: the Google Sheets call, or (with no sheet configured) the email alert. |
+| 503 | `WAITLIST_UNAVAILABLE` | — | yes | Neither the sheet nor email alerts are configured (alerts turned off and no Google env vars). |
 | 500 | `WAITLIST_FAILED` | — | yes | Unexpected error. |
 
 Suggested UI: disable the button while the request is in flight; on `ok` show a thank-you state; on a `field` error mark that input; on `retryable` show the message with a retry action.
@@ -83,7 +83,22 @@ submitted_at | email | name | company | role | team_size | use_case | source | c
 - Values are written with `valueInputOption=RAW`, and anything starting with `= + - @` gets a leading `'`, so submitted text can't run as a formula in Sheets or in a CSV/Excel export.
 - Duplicate check: column B is read before each append. Two simultaneous submits of the same new email can both land; this is rare and harmless.
 
+## Email alerts
+
+Every **new** signup (not repeats, honeypot hits or invalid submissions) sends one email to `graymattertechllc@gmail.com`:
+
+- Subject: `[PoryGen] New beta waitlist signup: <email>`, with every field in a table.
+- Reply-To is the person's address, so replying from Gmail reaches them directly.
+- Sent server-side to `https://formsubmit.co/ajax/<address>`, identified by the stable site URL `https://porygen.vercel.app/`.
+- With the sheet configured, the sheet is the record and a failed alert is only logged. Without the sheet, the email is the record and a failed alert returns 502.
+- `WAITLIST_NOTIFY_EMAIL` overrides the address (or takes FormSubmit's random alias after activation); `off` disables alerts.
+
+**One-time activation:** FormSubmit holds the first message for a new form and emails an **Activate Form** link to the inbox. Click it once for PoryGen; that first signup is still saved in the sheet, but its alert is not re-sent. After activating, FormSubmit offers a random alias you can put in `WAITLIST_NOTIFY_EMAIL` so the address isn't in requests.
+
 ## Setup (one time)
+
+Email alerts need no setup beyond the activation click above. The sheet needs the steps below.
+
 
 1. **Google Cloud project** → APIs & Services → enable **Google Sheets API**.
 2. IAM & Admin → Service Accounts → **Create service account** (no roles needed) → Keys → **Add key → JSON**. Keep the file private; don't commit it.
@@ -93,7 +108,7 @@ submitted_at | email | name | company | role | team_size | use_case | source | c
    - `GOOGLE_SERVICE_ACCOUNT_EMAIL` = `client_email` from the JSON
    - `GOOGLE_PRIVATE_KEY` = `private_key` from the JSON (as-is, with its `\n` sequences)
    - `WAITLIST_SPREADSHEET_ID` = the ID between `/d/` and `/edit` in the sheet URL
-   - optional `WAITLIST_SHEET_TAB`, `WAITLIST_ALLOWED_ORIGINS` (comma-separated, e.g. `http://localhost:5173` for local dev against a deployed API)
+   - optional `WAITLIST_NOTIFY_EMAIL` (default `graymattertechllc@gmail.com`, a FormSubmit alias, or `off`), `WAITLIST_SHEET_TAB`, `WAITLIST_ALLOWED_ORIGINS` (comma-separated, e.g. `http://localhost:5173` for local dev against a deployed API)
 6. Redeploy, then check:
 
 ```sh
@@ -102,7 +117,7 @@ curl -sS -X POST https://porygen.vercel.app/api/waitlist \
   -d '{"email":"you@example.com","consent":true,"source":"setup-check"}'
 ```
 
-Expect `{"ok":true,"status":"joined"}` and a new row. A `503 WAITLIST_UNAVAILABLE` means an env var is missing; a `502` usually means the sheet isn't shared with the service account, `WAITLIST_SHEET_TAB` names a tab that doesn't exist, or the Sheets API isn't enabled (the Vercel function log shows the Google HTTP status).
+Expect `{"ok":true,"status":"joined"}`, a new row, and an alert email (or, the very first time, FormSubmit's activation email). A `503 WAITLIST_UNAVAILABLE` means alerts are off and a Google env var is missing; a `502` usually means the sheet isn't shared with the service account, `WAITLIST_SHEET_TAB` names a tab that doesn't exist, or the Sheets API isn't enabled (the Vercel function log shows the Google HTTP status).
 
 Local dev: `vite` doesn't serve `/api`. Run `vercel dev` with the env vars in `.env.local`, or point the form at a preview deployment and add the local origin to `WAITLIST_ALLOWED_ORIGINS`.
 
@@ -116,4 +131,4 @@ Local dev: `vite` doesn't serve `/api`. Run `vercel dev` with the env vars in `.
 
 ## Privacy
 
-Unlike scan source, waitlist contact details **are deliberately stored**, in the Google Sheet (Google is a subprocessor). No IP address, user agent or scan data goes into the row. Mention the waitlist in the planned Privacy Policy, and honour removal requests by deleting the row.
+Unlike scan source, waitlist contact details **are deliberately stored** in the Google Sheet and sent by email through FormSubmit to the Gray Matter Gmail inbox (Google and FormSubmit are subprocessors). No IP address, user agent or scan data goes into the row. Mention the waitlist in the planned Privacy Policy, and honour removal requests by deleting the row.

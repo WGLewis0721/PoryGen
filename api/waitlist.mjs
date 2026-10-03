@@ -1,5 +1,6 @@
 import { createSheetsStore } from "./_lib/google-sheets.mjs";
 import { createWaitlistHandler } from "./_lib/waitlist.mjs";
+import { createFormSubmitNotifier, DEFAULT_NOTIFY_EMAIL } from "./_lib/formsubmit.mjs";
 
 export const config = { api: { bodyParser: false } };
 
@@ -18,4 +19,10 @@ const store = configured
 
 const allowedOrigins = String(env.WAITLIST_ALLOWED_ORIGINS ?? "").split(",").map(origin => origin.trim()).filter(Boolean);
 
-export default createWaitlistHandler({ store, allowedOrigins });
+// Email alert to the Gray Matter inbox by default; WAITLIST_NOTIFY_EMAIL overrides it, "off" disables it.
+const notifyTo = String(env.WAITLIST_NOTIFY_EMAIL ?? "").trim() || DEFAULT_NOTIFY_EMAIL;
+const notifier = notifyTo.toLowerCase() === "off"
+  ? null
+  : createFormSubmitNotifier({ to: notifyTo, product: "PoryGen", siteUrl: "https://porygen.vercel.app/" });
+
+export default createWaitlistHandler({ store, notifier, allowedOrigins });
