@@ -78,11 +78,11 @@ A future Source Match Report must not weaken this boundary merely for convenienc
 
 ## Waitlist contact data
 
-POST /api/waitlist is the one anonymous endpoint that deliberately persists visitor data: the contact fields a person submits (email, optional name/company/role/team size/use case/source) plus a consent version, appended to a Google Sheet by a server-side service account and emailed as an alert to the Gray Matter Gmail inbox through FormSubmit (server-side; the browser never calls FormSubmit).
+POST /api/waitlist is the one anonymous endpoint that deliberately persists visitor data: the name and email a person submits (nothing else from the form is kept) plus a consent version, appended to a Google Sheet by a server-side service account and emailed as an alert to the Gray Matter Gmail inbox through FormSubmit (server-side; the browser never calls FormSubmit).
 
 - GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY are server-side only; the service account reaches only the spreadsheet explicitly shared with it.
 - No IP address, user agent, scan source or scan results are stored with a signup.
-- Explicit consent is required; duplicate and new emails get the same response.
+- Submitting is the opt-in (an explicit `consent: false` is refused); duplicate and new emails get the same response.
 - Cells are written RAW and formula-prefixed text is escaped.
 - Same-origin check, 8 KB body cap, honeypot and a best-effort per-instance IP rate limit; add a Vercel Firewall rule for a durable limit.
 

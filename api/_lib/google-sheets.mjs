@@ -64,7 +64,7 @@ export function createSheetsStore({ clientEmail, privateKey, spreadsheetId, tab 
     },
     async appendRow(row) {
       // RAW stores every value as typed text, so nothing is evaluated as a formula.
-      const url = `${SHEETS_URL}/${encodeURIComponent(spreadsheetId)}/values/${range(tab, "A:J")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+      const url = `${SHEETS_URL}/${encodeURIComponent(spreadsheetId)}/values/${range(tab, "A:E")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
       await call(url, await authed({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ values: [row] }) }), "Sheets append");
     },
   };

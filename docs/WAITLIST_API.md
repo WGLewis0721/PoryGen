@@ -13,15 +13,9 @@ const response = await fetch('/api/waitlist', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({
-    email: 'ada@example.com',      // required
-    consent: true,                 // required, must be literal true
-    name: 'Ada Lovelace',          // optional
-    company: 'Analytical Engines', // optional
-    role: 'Engineer',              // optional, free text
-    teamSize: '2-10',              // optional: "1" | "2-10" | "11-50" | "51-200" | "200+"
-    useCase: 'Checking AI-assisted code before release', // optional
-    source: 'landing',             // optional: where the form lives, e.g. landing | scan-results | utm_campaign
-    website: '',                   // honeypot: render as a hidden input and leave empty
+    name: 'Ada Lovelace',     // optional, shown as a required field in the form
+    email: 'ada@example.com', // required
+    website: '',              // honeypot: render as a hidden input and leave empty
   }),
 });
 const result = await response.json();
@@ -29,17 +23,11 @@ const result = await response.json();
 
 | Field | Type | Rule |
 |---|---|---|
+| `name` | string | ≤100 chars; trimmed, single line. |
 | `email` | string | Required. Trimmed and lowercased. ≤254 chars. |
-| `consent` | boolean | Required, must be `true`. Back it with an unticked checkbox, e.g. “Email me about the PoryGen beta. I can unsubscribe anytime.” |
-| `name` | string | Optional, ≤100 chars. |
-| `company` | string | Optional, ≤120 chars. |
-| `role` | string | Optional, ≤80 chars. |
-| `teamSize` | string | Optional, one of `1`, `2-10`, `11-50`, `51-200`, `200+`. |
-| `useCase` | string | Optional, ≤1000 chars. Newlines are collapsed to spaces. |
-| `source` | string | Optional, ≤100 chars. |
 | `website` | string | Honeypot. Hide it from people (`position:absolute; left:-9999px`, `tabindex="-1"`, `autocomplete="off"`, `aria-hidden="true"`), not with `type="hidden"`. |
 
-Longer optional text is truncated, not rejected. Missing/empty optional fields are fine; an email plus consent is a complete signup.
+**Only name and email are collected.** Any other field a form sends (`product`, `source`, `consent`, …) is ignored and never stored, except that `consent: false` is refused. Submitting the form is the opt-in, so put a line under the button such as “We'll email you about the PoryGen beta. Unsubscribe anytime.”
 
 ### Responses
 
@@ -55,8 +43,8 @@ Errors share the scanner's shape — `{ error, code, retryable, field? }`. `erro
 |---|---|---|---|---|
 | 400 | `EMAIL_REQUIRED` | `email` | no | No email. |
 | 400 | `INVALID_EMAIL` | `email` | no | Not a plausible email address. |
-| 400 | `CONSENT_REQUIRED` | `consent` | no | `consent !== true`. |
-| 400 | `INVALID_FIELD` | the field | no | Wrong type, or `teamSize` not in the list. |
+| 400 | `CONSENT_REQUIRED` | `consent` | no | The form sent `consent: false`. |
+| 400 | `INVALID_FIELD` | `name` | no | `name` isn't text. |
 | 400 | `INVALID_JSON` / `INVALID_REQUEST` | — | no | Body isn't a JSON object. |
 | 403 | `ORIGIN_NOT_ALLOWED` | — | no | Browser `Origin` is not this site or the allowlist. |
 | 405 | `METHOD_NOT_ALLOWED` | — | no | Use POST. |
@@ -71,10 +59,10 @@ Suggested UI: disable the button while the request is in flight; on `ok` show a 
 
 ## Spreadsheet
 
-Rows go to the spreadsheet's **first tab**, or the tab named by `WAITLIST_SHEET_TAB`. Row 1 must be this header, columns A–J:
+Rows go to the spreadsheet's **first tab**, or the tab named by `WAITLIST_SHEET_TAB`. Row 1 must be this header, columns A–E:
 
 ```
-submitted_at | email | name | company | role | team_size | use_case | source | consent_version | status
+submitted_at | email | name | consent_version | status
 ```
 
 - `submitted_at` is ISO-8601 UTC.
@@ -87,7 +75,7 @@ submitted_at | email | name | company | role | team_size | use_case | source | c
 
 Every **new** signup (not repeats, honeypot hits or invalid submissions) sends one email to `graymattertechllc@gmail.com`:
 
-- Subject: `[PoryGen] New beta waitlist signup: <email>`, with every field in a table.
+- Subject: `[PoryGen] New beta waitlist signup: <email>`, with the name, email and time in a table.
 - Reply-To is the person's address, so replying from Gmail reaches them directly.
 - Sent server-side to `https://formsubmit.co/ajax/<address>`, identified by the stable site URL `https://porygen.vercel.app/`.
 - With the sheet configured, the sheet is the record and a failed alert is only logged. Without the sheet, the email is the record and a failed alert returns 502.
@@ -124,7 +112,7 @@ Local dev: `vite` doesn't serve `/api`. Run `vercel dev` with the env vars in `.
 ## Abuse controls
 
 - Same-origin `Origin` check (plus allowlist); requests with no `Origin` (curl, server-side) are accepted, since they aren't browser CSRF.
-- 8 KB body cap, JSON only, strict types, enum `teamSize`.
+- 8 KB body cap, JSON only, strict types; unknown fields are dropped.
 - Honeypot `website` field: filled → fake success, nothing stored.
 - In-memory rate limit of 10 attempts per IP per 10 minutes. This only counts within one warm function instance, so it's best-effort; for a durable limit add a **Vercel Firewall rate-limit rule** on `/api/waitlist`.
 - Errors never echo Google responses or credentials to the client.

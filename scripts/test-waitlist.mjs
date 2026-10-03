@@ -6,7 +6,8 @@ import { createSheetsStore, signServiceAccountJwt, normalizePrivateKey } from '.
 import { createWaitlistHandler, createRateLimiter, validateSubmission, toRow, cell, SHEET_HEADERS, WAITLIST_CONSENT_VERSION } from '../api/_lib/waitlist.mjs';
 import { createFormSubmitNotifier } from '../api/_lib/formsubmit.mjs';
 
-const valid = { email: '  Ada@Example.COM ', name: 'Ada', company: 'Analytical', role: 'Engineer', teamSize: '2-10', useCase: 'Check AI output', source: 'landing', consent: true };
+// Includes the extra fields the homepage form sends; they must be ignored.
+const valid = { email: '  Ada@Example.COM ', name: 'Ada', consent: true, product: 'PoryGen', source: 'homepage' };
 
 function memoryStore() {
   const rows = [];
@@ -38,14 +39,15 @@ test('valid signup appends one normalized row in header order', async () => {
   assert.equal(res.headers['cache-control'], 'no-store');
   assert.equal(store.rows.length, 1);
   assert.equal(store.rows[0].length, SHEET_HEADERS.length);
-  assert.deepEqual(store.rows[0], ['2026-10-03T12:00:00.000Z', 'ada@example.com', 'Ada', 'Analytical', 'Engineer', '2-10', 'Check AI output', 'landing', WAITLIST_CONSENT_VERSION, 'waitlisted']);
+  assert.deepEqual(store.rows[0], ['2026-10-03T12:00:00.000Z', 'ada@example.com', 'Ada', WAITLIST_CONSENT_VERSION, 'waitlisted']);
 });
 
 test('email-only signup is enough', async () => {
   const { store, handler } = make();
-  const res = await call(handler, { email: 'solo@example.dev', consent: true });
+  const res = await call(handler, { email: 'solo@example.dev' });
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(store.rows[0].slice(1, 8), ['solo@example.dev', '', '', '', '', '', '']);
+  assert.deepEqual(store.rows[0].slice(1, 3), ['solo@example.dev', '']);
+  assert.deepEqual(validateSubmission(valid), { email: 'ada@example.com', name: 'Ada' });
 });
 
 test('duplicate email is not stored twice and the response does not reveal it', async () => {
@@ -64,9 +66,7 @@ test('validation errors name the field', async () => {
     [{ email: 'not-an-email', consent: true }, 'INVALID_EMAIL', 'email'],
     [{ email: 'a@b', consent: true }, 'INVALID_EMAIL', 'email'],
     [{ email: `${'a'.repeat(250)}@x.io`, consent: true }, 'INVALID_EMAIL', 'email'],
-    [{ email: 'a@b.co' }, 'CONSENT_REQUIRED', 'consent'],
-    [{ email: 'a@b.co', consent: 'yes' }, 'CONSENT_REQUIRED', 'consent'],
-    [{ email: 'a@b.co', consent: true, teamSize: '7' }, 'INVALID_FIELD', 'teamSize'],
+    [{ email: 'a@b.co', consent: false }, 'CONSENT_REQUIRED', 'consent'],
     [{ email: 'a@b.co', consent: true, name: 42 }, 'INVALID_FIELD', 'name'],
   ]) {
     const res = await call(handler, body);
@@ -85,14 +85,14 @@ test('request shape boundaries', async () => {
   assert.equal((await call(handler, valid, { type: 'text/plain' })).statusCode, 415);
   assert.equal((await call(handler, null, { raw: '{oops' })).payload.code, 'INVALID_JSON');
   assert.equal((await call(handler, null, { raw: '[]' })).payload.code, 'INVALID_REQUEST');
-  const big = await call(handler, { ...valid, useCase: 'x'.repeat(9000) });
+  const big = await call(handler, { ...valid, padding: 'x'.repeat(9000) });
   assert.equal(big.statusCode, 413);
 });
 
 test('free text is trimmed, single-lined, length-capped and formula-safe', () => {
-  const entry = validateSubmission({ ...valid, name: '  =HYPERLINK("http://evil")  ', useCase: 'line one\n\nline\ttwo', company: 'x'.repeat(500) });
-  assert.equal(entry.useCase, 'line one line two');
-  assert.equal(entry.company.length, 120);
+  assert.equal(validateSubmission({ ...valid, name: '  Ada\n\nLove\tlace ' }).name, 'Ada Love lace');
+  assert.equal(validateSubmission({ ...valid, name: 'x'.repeat(500) }).name.length, 100);
+  const entry = validateSubmission({ ...valid, name: '  =HYPERLINK("http://evil")  ' });
   const row = toRow(entry, '2026-10-03T12:00:00.000Z');
   assert.equal(row[2], `'=HYPERLINK("http://evil")`);
   for (const prefix of ['=', '+', '-', '@']) assert.equal(cell(`${prefix}1`), `'${prefix}1`);
@@ -195,7 +195,7 @@ test('Sheets store without a tab name targets the first tab', async () => {
   await store.hasEmail('a@b.co');
   await store.appendRow(['x']);
   assert.match(google.calls[1].url, /\/values\/B2%3AB\?/);
-  assert.match(google.calls[2].url, /\/values\/A%3AJ:append\?/);
+  assert.match(google.calls[2].url, /\/values\/A%3AE:append\?/);
 });
 
 test('Sheets store refreshes an expired token and surfaces HTTP failures', async () => {

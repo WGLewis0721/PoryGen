@@ -4,11 +4,9 @@
 
 export const WAITLIST_CONSENT_VERSION = "2026-10-03-v1";
 export const MAX_BODY_BYTES = 8 * 1024;
-export const TEAM_SIZES = ["1", "2-10", "11-50", "51-200", "200+"];
-// Order of columns A:J in the sheet; docs/WAITLIST_API.md lists the header row.
-export const SHEET_HEADERS = ["submitted_at", "email", "name", "company", "role", "team_size", "use_case", "source", "consent_version", "status"];
-
-const TEXT_FIELDS = { name: 100, company: 120, role: 80, useCase: 1000, source: 100 };
+// Order of columns A:E in the sheet; docs/WAITLIST_API.md lists the header row.
+export const SHEET_HEADERS = ["submitted_at", "email", "name", "consent_version", "status"];
+const NAME_MAX = 100;
 // Deliberately simple: one @, no spaces, a dotted domain. Delivery is the real check.
 const EMAIL = /^[^\s@"<>()[\],;:\\]+@[^\s@"<>()[\],;:\\]+\.[^\s@"<>()[\],;:\\]{2,}$/;
 
@@ -29,27 +27,19 @@ export function validateSubmission(body) {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email) throw new WaitlistError("EMAIL_REQUIRED", "Enter your email address.", 400, { field: "email" });
   if (email.length > 254 || !EMAIL.test(email)) throw new WaitlistError("INVALID_EMAIL", "Enter a valid email address.", 400, { field: "email" });
-  if (body.consent !== true) throw new WaitlistError("CONSENT_REQUIRED", "Agree to be contacted about the PoryGen beta to join the waitlist.", 400, { field: "consent" });
-
-  const fields = {};
-  for (const [field, max] of Object.entries(TEXT_FIELDS)) {
-    const value = body[field];
-    if (value === undefined || value === null || value === "") { fields[field] = ""; continue; }
-    if (typeof value !== "string") throw new WaitlistError("INVALID_FIELD", `${field} must be text.`, 400, { field });
-    fields[field] = clean(value, max);
+  // Joining is the opt-in; a form that sends an explicit "no" is refused.
+  if (body.consent === false) throw new WaitlistError("CONSENT_REQUIRED", "Agree to be contacted about the PoryGen beta to join the waitlist.", 400, { field: "consent" });
+  // Only name and email are collected; any other field a form sends is ignored.
+  let name = "";
+  if (body.name !== undefined && body.name !== null && body.name !== "") {
+    if (typeof body.name !== "string") throw new WaitlistError("INVALID_FIELD", "name must be text.", 400, { field: "name" });
+    name = clean(body.name, NAME_MAX);
   }
-  let teamSize = "";
-  if (body.teamSize !== undefined && body.teamSize !== null && body.teamSize !== "") {
-    if (!TEAM_SIZES.includes(body.teamSize)) throw new WaitlistError("INVALID_FIELD", `teamSize must be one of ${TEAM_SIZES.join(", ")}.`, 400, { field: "teamSize" });
-    teamSize = body.teamSize;
-  }
-  return { email, teamSize, ...fields };
+  return { email, name };
 }
 
-export const toRow = (entry, submittedAt) => [
-  submittedAt, entry.email, entry.name, entry.company, entry.role, entry.teamSize,
-  entry.useCase, entry.source, WAITLIST_CONSENT_VERSION, "waitlisted",
-].map(cell);
+export const toRow = (entry, submittedAt) =>
+  [submittedAt, entry.email, entry.name, WAITLIST_CONSENT_VERSION, "waitlisted"].map(cell);
 
 // Best-effort, per warm instance. Vercel Firewall rate limiting is the durable layer.
 export function createRateLimiter({ limit = 10, windowMs = 10 * 60_000, maxKeys = 10_000, now = Date.now } = {}) {
