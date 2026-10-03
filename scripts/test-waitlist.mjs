@@ -264,12 +264,16 @@ test('simultaneous submissions of one new email store a single row', async () =>
   assert.equal(sent.length, 1);
 });
 
-test('emails stored with the formula-guard apostrophe still count as duplicates', async () => {
+test('emails starting with a formula character or apostrophe are refused, so stored emails stay verbatim', async () => {
   const { store, handler } = make();
-  await call(handler, { email: '+tag@example.com' });
-  assert.equal(store.rows[0][1], "'+tag@example.com");
-  const sheets = createSheetsStore({ clientEmail: 'bot@x', privateKey: pem, spreadsheetId: 's', fetch: fakeGoogle({ emails: ["'+tag@example.com"] }).fetch });
-  assert.equal(await sheets.hasEmail('+tag@example.com'), true);
+  for (const email of ['+tag@example.com', '-x@example.com', '=cmd@example.com', "'foo@example.com"]) {
+    const res = await call(handler, { email });
+    assert.equal(res.statusCode, 400, email);
+    assert.equal(res.payload.code, 'INVALID_EMAIL');
+  }
+  assert.equal(store.rows.length, 0);
+  await call(handler, { email: 'user+tag@example.com' });
+  assert.equal(store.rows[0][1], 'user+tag@example.com');
 });
 
 test('honeypot and invalid submissions never send an alert', async () => {

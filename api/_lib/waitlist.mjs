@@ -27,6 +27,9 @@ export function validateSubmission(body) {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email) throw new WaitlistError("EMAIL_REQUIRED", "Enter your email address.", 400, { field: "email" });
   if (email.length > 254 || !EMAIL.test(email)) throw new WaitlistError("INVALID_EMAIL", "Enter a valid email address.", 400, { field: "email" });
+  // Legal but practically unused, and they would need the sheet's formula guard,
+  // which would break exact duplicate matching. Refuse them instead.
+  if (/^[=+\-@']/.test(email)) throw new WaitlistError("INVALID_EMAIL", "Enter a valid email address.", 400, { field: "email" });
   // Joining is the opt-in; a form that sends an explicit "no" is refused.
   if (body.consent === false) throw new WaitlistError("CONSENT_REQUIRED", "Agree to be contacted about the PoryGen beta to join the waitlist.", 400, { field: "consent" });
   // Only name and email are collected; any other field a form sends is ignored.

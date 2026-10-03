@@ -62,8 +62,8 @@ export function createSheetsStore({ clientEmail, privateKey, spreadsheetId, tab 
     async hasEmail(email) {
       const url = `${SHEETS_URL}/${encodeURIComponent(spreadsheetId)}/values/${range(tab, "B2:B")}?majorDimension=COLUMNS`;
       const json = await call(url, await authed({ method: "GET" }), "Sheets read");
-      // toRow may have prefixed an apostrophe (formula guard); RAW stores it literally.
-      return (json.values?.[0] ?? []).some(cell => String(cell).trim().replace(/^'/, "").toLowerCase() === email);
+      // Accepted emails never start with a formula character, so they are stored verbatim.
+      return (json.values?.[0] ?? []).some(cell => String(cell).trim().toLowerCase() === email);
     },
     async appendRow(row) {
       // RAW stores every value as typed text, so nothing is evaluated as a formula.
