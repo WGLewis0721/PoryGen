@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, CodeXml, GitCompare, History, PencilLine, RefreshCw, ShieldCheck } from "lucide-react";
 import { Picture } from "../../components/Picture";
+import { WaitlistSection } from "./WaitlistSection";
 import { CodeCompare } from "../../components/CodeCompare";
 import { sliceLines } from "../../components/codeLines";
 import { EvidenceList } from "../../components/EvidenceList";
@@ -385,6 +386,7 @@ export function LandingPage() {
       <Protection />
       <Record />
       <PricingSummary />
+      <WaitlistSection />
       <FinalCta />
     </>
   );
