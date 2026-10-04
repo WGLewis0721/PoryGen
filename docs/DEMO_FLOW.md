@@ -74,17 +74,19 @@ The sample demo remains a fictional walkthrough for someone who wants to underst
 
 It is educational and clearly separate from the live scanner.
 
-## 3. Next customer flow — Source Match Report
+## 3. Shipped customer flow — Source Match Report
 
-The next net-new addition is:
+After a completed GitHub, ZIP, or folder scan, the user can download a
+self-contained HTML Source Match Report and print it to PDF. This export is
+generated locally and includes scope, completeness, exclusions, findings,
+evidence, source/license metadata, review decisions, and limitations. See
+[SOURCE_MATCH_REPORT.md](SOURCE_MATCH_REPORT.md) for the report contract.
 
 \`\`\`
 scan
 → inspect findings
 → export Source Match Report
 \`\`\`
-
-The report should summarize what was scanned, coverage, exclusions, findings, possible sources and evidence.
 
 It is not an originality certificate, legal opinion or AI-authorship report.
 

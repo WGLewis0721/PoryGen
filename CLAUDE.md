@@ -16,8 +16,8 @@
 - **Sample demo:** /demo is fictional data and secondary to the real /scan path.
 - **Existing stack:** React 19 + TypeScript + Vite + React Router; Vercel. Supabase/Postgres/RLS, billing and older provenance/history work remain reusable groundwork but must not block the first scan.
 - **Secrets:** production GITHUB_TOKEN is server-side only. Never place credentials in docs or browser code.
-- **Next net-new product:** Source Match Report.
-- **Roadmap order:** Source Match Report → MCP → CLI → Engine/corpus scale-up → connected GitHub + continuous monitoring → monetization/teams later.
+- **Shipped report:** Source Match Report is a local HTML export with browser Print/PDF, scope, coverage, findings and limits; it is not a certification or hosted report history.
+- **Next net-new product:** PoryGen MCP, followed by CLI, Engine/corpus scale-up, connected GitHub + continuous monitoring, then monetization/teams when justified.
 - **Parallel hardening:** abuse/rate limiting, monitoring, Privacy/data-handling, secret hygiene, counsel review, repository privacy before deeper proprietary Engine logic.
 - **Do not:** redefine the product as AI detection or compliance; reopen open-ended matcher research without a concrete production failure; put signup ahead of first value; claim exhaustive coverage; expose proprietary ranking logic client-side.
-- **Pointers:** README.md, ROADMAP.md, docs/ARCHITECTURE.md, docs/SCANNER.md, docs/ZIP_SCAN_API.md, docs/SECURITY.md.
+- **Pointers:** README.md for the shipped golden baseline; ROADMAP.md for current status and next gates; docs/ARCHITECTURE.md, docs/SCANNER.md, docs/ZIP_SCAN_API.md, and docs/SECURITY.md for technical contracts. Do not use historical progress/handoff notes to override these.

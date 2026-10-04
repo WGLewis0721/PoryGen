@@ -5,6 +5,12 @@
 > **Current stage:** live multi-input MVP + early PoryGen Engine  
 > **Core question:** **Does this code meaningfully resemble code that exists somewhere else, and where might it have come from?**
 
+The current multi-input scanner and local Source Match Report are the shipped
+golden baseline. MCP, CLI, broader corpus, connected GitHub, and paid access
+remain future milestones. The phase statuses below own current planning;
+[progress.md](progress.md) and [docs/OPUS_HANDOFF.md](docs/OPUS_HANDOFF.md)
+are dated release evidence.
+
 ## Product thesis
 
 PoryGen checks code against indexed public source and shows evidence when meaningful similarity is found.
@@ -497,4 +503,3 @@ PoryGen is currently a web developer SaaS. **App Store distribution is not requi
 - [ ] If a future macOS developer companion is validated, use notarized/macOS distribution and/or the Mac App Store as appropriate, preserve the hosted Engine/entitlement boundary, and use Apple's commerce rules for digital access sold inside an App Store build.
 
 **Paid-production exit:** a customer can pay, receive a clearly defined scan/integration entitlement exactly once, submit private code under documented handling rules, receive reproducible evidence with honest coverage limits, cancel/refund cleanly, and get support from observable/auditable production systems.
-

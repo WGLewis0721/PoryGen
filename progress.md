@@ -1,5 +1,9 @@
 # Progress
 
+**Historical release log.** For the current shipped baseline and next gate,
+use [README.md](README.md) and [ROADMAP.md](ROADMAP.md). Entries below record
+their date's evidence rather than a continuously updated status table.
+
 ## Recent release train — latest 10 merged commits
 
 1. `e883d51` / PR #13 — added versioned clickwrap Terms and scan trust fixes.
