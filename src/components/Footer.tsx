@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { PRODUCT_LINE } from "../config/site";
+import { isSupabaseConfigured } from "../lib/supabaseClient";
 
 export function Footer() {
   return (
@@ -24,11 +25,14 @@ export function Footer() {
           <Link to="/docs">Documentation</Link>
           <Link to="/terms">Terms of Use</Link>
         </nav>
-        <nav className="site-footer-col" aria-label="Account">
-          <span className="label-caps">Account</span>
-          <Link to="/sign-in">Sign in</Link>
-          <Link to="/sign-up">Create an account</Link>
-        </nav>
+        {/* Accounts are optional: scanning needs none. Only offer them where sign-up can actually work. */}
+        {isSupabaseConfigured && (
+          <nav className="site-footer-col" aria-label="Account">
+            <span className="label-caps">Account</span>
+            <Link to="/sign-in">Sign in</Link>
+            <Link to="/sign-up">Create an account</Link>
+          </nav>
+        )}
       </div>
       <div className="shell site-footer-base">
         <p>
