@@ -32,4 +32,9 @@ or legal advice.
 
 Checks: `npx vitest run src/features/publicScan` and `npm run build`.
 
-A production smoke across all 30 public WGLewis0721 repositories verified 29 actual HTML downloads against their visible scan states. The remaining repository has no commits and exposed a GitHub 409 adapter edge case; the narrow fix is in open PR #23 and is not production until merged.
+The initial production smoke across 30 public WGLewis0721 repositories
+verified 29 HTML downloads against their visible scan states. The remaining
+empty repository exposed a GitHub 409 adapter edge case. PR #23 later merged
+and deployed the narrow known-empty revision fix; see
+[`progress.md`](../progress.md) for dated evidence. The initial 29/30
+observation is not a claim that a second all-30 run was performed.
