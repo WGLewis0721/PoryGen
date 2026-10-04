@@ -1,5 +1,10 @@
 # Handoff — multi-input MVP
 
+**Dated implementation handoff, not the current status owner.** The current
+golden product baseline is in [README.md](../README.md); [ROADMAP.md](../ROADMAP.md)
+owns release gates and next work. This record preserves the multi-input/report
+release decisions and limits.
+
 ## Current state
 
 PoryGen is a live source-match product.

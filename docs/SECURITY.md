@@ -74,7 +74,9 @@ Public GitHub results/review decisions may be stored in localStorage to support 
 
 ZIP/folder source, excerpts and complete upload scan results must not be written to localStorage/sessionStorage.
 
-A future Source Match Report must not weaken this boundary merely for convenience. If private sharing later requires persistence, retention must be deliberate and disclosed.
+The shipped Source Match Report is generated in the browser and saved to the
+user's device; it does not add hosted report persistence. If private sharing
+later requires persistence, retention must be deliberate and disclosed.
 
 ## Waitlist contact data
 

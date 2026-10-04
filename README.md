@@ -139,7 +139,7 @@ No customer code is sent to a runtime LLM.
 - **Not legal advice.**
 - **Not a certification.**
 
-## What is next
+## Shipped report and next work
 
 **Source Match Report** is available after a completed public, ZIP, or folder scan. Choose **Download Source Match Report** for a self-contained HTML artifact; open it and print to PDF if needed. It includes source metadata, compact evidence, coverage, exclusions, and current review/dismissal decisions. Export runs locally without storing uploaded source on the server. The downloaded file contains excerpts; share it deliberately. See [report behavior](docs/SOURCE_MATCH_REPORT.md).
 
@@ -191,5 +191,5 @@ The production endpoint is api/scan.mjs. Stable source matching remains in the e
 - [docs/SECURITY.md](docs/SECURITY.md) — scan boundary, secrets and retention
 - [docs/WAITLIST_API.md](docs/WAITLIST_API.md) — beta waitlist API contract and Google Sheets setup
 - [docs/DEMO_FLOW.md](docs/DEMO_FLOW.md) — live customer flows
-- [docs/OPUS_HANDOFF.md](docs/OPUS_HANDOFF.md) — current implementation handoff
+- [docs/OPUS_HANDOFF.md](docs/OPUS_HANDOFF.md) and [progress.md](progress.md) — dated release history, not current status
 - [IMPLEMENTATION_SOURCES.md](IMPLEMENTATION_SOURCES.md) — external implementation references

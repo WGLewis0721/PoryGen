@@ -228,15 +228,15 @@ Reuse those components when they fit later durable/connected features. Do not pu
 
 ## Evolution path
 
-Net-new sequence:
+The local Source Match Report shipped in PR #20 and is part of the current
+golden baseline. Remaining work:
 
-1. reconcile, merge and deploy Source Match Report PR #20 (implemented, not production yet);
-2. PoryGen MCP;
-3. PoryGen CLI;
-4. larger scalable Engine/corpus retrieval;
-5. connected GitHub + durable state + continuous monitoring;
-6. larger-scan workers when scale requires them;
-7. monetization, teams and distribution.
+1. PoryGen MCP;
+2. PoryGen CLI;
+3. larger scalable Engine/corpus retrieval;
+4. connected GitHub + durable state + continuous monitoring;
+5. larger-scan workers when scale requires them;
+6. monetization, teams and distribution.
 
 Operational hardening continues in parallel.
 
